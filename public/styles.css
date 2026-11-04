@@ -712,36 +712,36 @@ button {
 
 /* Centered claim pop-up */
 .modal-backdrop {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 30;
   background: rgba(16, 24, 40, 0.5);
+  overscroll-behavior: contain;
 }
 
 .modal-card {
-  position: absolute;
+  position: fixed;
   top: 50%;
   left: 50%;
   z-index: 31;
-  width: min(360px, calc(100% - 40px));
-  max-height: 84%;
+  width: min(360px, calc(100vw - 40px));
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 18px;
   border-radius: 16px;
   background: #fff;
   box-shadow: 0 24px 70px rgba(3, 30, 80, 0.32);
   transform: translate(-50%, -50%);
-  animation: card-in 160ms ease-out;
+  animation: card-in 140ms ease-out;
 }
 
 @keyframes card-in {
   from {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(0.96);
   }
   to {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
   }
 }
 

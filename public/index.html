@@ -250,7 +250,17 @@
         </div>
         <label class="field">
           <span class="field-label">Receiver full name</span>
-          <input class="input" id="claimName" placeholder="Full name of the person claiming" autocomplete="name" />
+          <input
+            class="input"
+            id="claimName"
+            type="text"
+            inputmode="text"
+            placeholder="Full name of the person claiming"
+            autocomplete="off"
+            autocapitalize="words"
+            spellcheck="false"
+            enterkeyhint="done"
+          />
         </label>
         <p class="modal-error" id="claimError" role="alert"></p>
         <div class="modal-actions">

@@ -724,6 +724,9 @@
 
   async function autoImportInbox() {
     if (!isNative || !state.user) return;
+    if (!els.claimModal.hidden || state.activeSheet) return;
+    const active = document.activeElement;
+    if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName)) return;
     if (Date.now() - state.lastInboxScan < 5 * 60 * 1000) return;
     state.lastInboxScan = Date.now();
     const result = callNative('importInbox', '0');
@@ -832,7 +835,11 @@
     els.claimError.textContent = '';
     els.claimModal.hidden = false;
     els.claimBackdrop.hidden = false;
-    setTimeout(() => els.claimName.focus({ preventScroll: true }), 80);
+    requestAnimationFrame(() => {
+      if (document.activeElement !== els.claimName) {
+        els.claimName.focus({ preventScroll: true });
+      }
+    });
   }
 
   function closeClaimModal() {
@@ -1275,14 +1282,24 @@
   function startBackgroundRefresh() {
     if (state.refreshTimer) return;
     state.refreshTimer = setInterval(() => {
-      if (document.visibilityState === 'visible' && state.user) {
+      if (
+        document.visibilityState === 'visible' &&
+        state.user &&
+        !state.activeSheet &&
+        els.claimModal.hidden
+      ) {
         refresh({ silent: true });
         if (isNative) autoImportInbox();
       }
     }, REFRESH_MS);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && state.user) {
+      if (
+        document.visibilityState === 'visible' &&
+        state.user &&
+        !state.activeSheet &&
+        els.claimModal.hidden
+      ) {
         refresh({ silent: true });
         if (isNative) autoImportInbox();
       }
@@ -1345,17 +1362,6 @@
       await afterAuth();
     }
 
-    state.refreshTimer = setInterval(() => {
-      if (document.visibilityState === 'visible') refresh({ silent: true });
-    }, REFRESH_MS);
-
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') refresh({ silent: true });
-    });
-
-    if ('serviceWorker' in navigator && !isNative) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
   }
 
   boot();
