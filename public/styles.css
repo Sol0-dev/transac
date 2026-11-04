@@ -710,16 +710,74 @@ button {
   font-size: 12.5px;
 }
 
-.claim-box {
-  margin: 0 0 14px;
-  padding: 12px;
-  border: 1px solid #cfe0f8;
-  border-radius: 10px;
-  background: #f6f9ff;
+/* Centered claim pop-up */
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: rgba(16, 24, 40, 0.5);
 }
 
-.claim-box .field {
-  margin-bottom: 10px;
+.modal-card {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 31;
+  width: min(360px, calc(100% - 40px));
+  max-height: 84%;
+  overflow-y: auto;
+  padding: 18px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 24px 70px rgba(3, 30, 80, 0.32);
+  transform: translate(-50%, -50%);
+  animation: card-in 160ms ease-out;
+}
+
+@keyframes card-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.modal-head h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  letter-spacing: -0.2px;
+}
+
+.modal-sub {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+
+.modal-error {
+  min-height: 16px;
+  margin: 2px 0 8px;
+  color: #b42318;
+  font-size: 12px;
+}
+
+.modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
 }
 
 .detail-grid dt {

@@ -4,11 +4,15 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
+import android.provider.MediaStore;
 import android.provider.Telephony;
 import android.util.Base64;
 import android.webkit.JavascriptInterface;
@@ -16,6 +20,10 @@ import android.webkit.JavascriptInterface;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.List;
@@ -394,9 +402,57 @@ public class Bridge {
     @JavascriptInterface
     public String requestSmsPermission() {
         activity.runOnUiThread(() -> {
-            if (activity instanceof MainActivity) ((MainActivity) activity).requestSmsPermissions();
+            if (activity instanceof MainActivity) ((MainActivity) activity).requestStartupPermissions();
         });
         return SyncClient.ok().toString();
+    }
+
+    @JavascriptInterface
+    public String saveCsv(String filename, String content) {
+        String clean = filename == null || filename.trim().isEmpty()
+                ? "transac-logs.csv"
+                : filename.trim().replaceAll("[^A-Za-z0-9._-]", "_");
+        byte[] bytes = (content == null ? "" : content).getBytes(StandardCharsets.UTF_8);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.MediaColumns.DISPLAY_NAME, clean);
+                values.put(MediaStore.MediaColumns.MIME_TYPE, "text/csv");
+                values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+                values.put(MediaStore.MediaColumns.IS_PENDING, 1);
+                Uri uri = activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                if (uri == null) return SyncClient.error("Could not create the CSV file.").toString();
+                try (OutputStream output = activity.getContentResolver().openOutputStream(uri)) {
+                    if (output == null) return SyncClient.error("Could not open the CSV file.").toString();
+                    output.write(bytes);
+                }
+                values.clear();
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0);
+                activity.getContentResolver().update(uri, values, null, null);
+                JSONObject out = SyncClient.ok();
+                out.put("path", Environment.DIRECTORY_DOWNLOADS + "/" + clean);
+                return out.toString();
+            }
+
+            if (activity.checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestSmsPermission();
+                return SyncClient.error("Allow storage permission, then tap Export CSV again.").toString();
+            }
+            File directory = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            if (!directory.exists() && !directory.mkdirs()) {
+                return SyncClient.error("Could not create the Downloads folder.").toString();
+            }
+            File file = new File(directory, clean);
+            try (FileOutputStream output = new FileOutputStream(file)) {
+                output.write(bytes);
+            }
+            JSONObject out = SyncClient.ok();
+            out.put("path", file.getAbsolutePath());
+            return out.toString();
+        } catch (Exception error) {
+            return SyncClient.error(error.getMessage()).toString();
+        }
     }
 
     @JavascriptInterface

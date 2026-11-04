@@ -45,7 +45,9 @@
         <p class="auth-error" id="authError" role="alert"></p>
         <button class="btn block" id="authSubmit" type="button">Sign in</button>
         <button class="auth-link native-only" id="authServerToggle" type="button" hidden>Use a central server</button>
-        <p class="auth-hint" id="authHint">Saved only on this phone. No server or internet needed.</p>
+        <p class="auth-hint" id="authHint">
+          Saved only on this phone. Allow SMS and storage when Android asks. No server or internet needed.
+        </p>
       </div>
     </div>
 
@@ -235,6 +237,27 @@
           </p>
         </div>
       </section>
+
+      <!-- Receiver full name pop-up -->
+      <div class="modal-backdrop" id="claimBackdrop" hidden></div>
+      <div class="modal-card" id="claimModal" hidden role="dialog" aria-modal="true" aria-labelledby="claimTitle">
+        <div class="modal-head">
+          <div>
+            <h3 id="claimTitle">Who received the money?</h3>
+            <p class="modal-sub" id="claimSub"></p>
+          </div>
+          <button class="sheet-close" id="claimClose" type="button" aria-label="Close">×</button>
+        </div>
+        <label class="field">
+          <span class="field-label">Receiver full name</span>
+          <input class="input" id="claimName" placeholder="Full name of the person claiming" autocomplete="name" />
+        </label>
+        <p class="modal-error" id="claimError" role="alert"></p>
+        <div class="modal-actions">
+          <button class="btn subtle" id="claimCancel" type="button">Cancel</button>
+          <button class="btn" id="claimConfirm" type="button">Confirm claim</button>
+        </div>
+      </div>
 
       <div class="toast" id="toast" role="status"></div>
     </div>

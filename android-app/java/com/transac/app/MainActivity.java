@@ -14,9 +14,12 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
+import java.util.ArrayList;
+import java.util.List;
+
 public class MainActivity extends Activity {
 
-    private static final int SMS_REQUEST = 1001;
+    private static final int STARTUP_REQUEST = 1001;
 
     private WebView webView;
     private Db db;
@@ -60,7 +63,7 @@ public class MainActivity extends Activity {
         setContentView(webView);
         webView.loadUrl("file:///android_asset/www/index.html");
 
-        requestSmsPermissions();
+        requestStartupPermissions();
     }
 
     private static final class TransacWebViewClient extends WebViewClient {
@@ -82,23 +85,37 @@ public class MainActivity extends Activity {
         }
     }
 
-    public void requestSmsPermissions() {
+    /**
+     * First launch asks for SMS access and, on Android versions that still use
+     * shared storage permissions, storage access for CSV exports. Android 10+
+     * saves exports through MediaStore, so no storage prompt is needed there.
+     */
+    public void requestStartupPermissions() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return;
-        String[] permissions = new String[]{Manifest.permission.RECEIVE_SMS, Manifest.permission.READ_SMS};
-        boolean missing = false;
-        for (String permission : permissions) {
-            if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
-                missing = true;
-                break;
-            }
+        List<String> permissions = new ArrayList<>();
+        addIfMissing(permissions, Manifest.permission.RECEIVE_SMS);
+        addIfMissing(permissions, Manifest.permission.READ_SMS);
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            addIfMissing(permissions, Manifest.permission.WRITE_EXTERNAL_STORAGE);
         }
-        if (missing) requestPermissions(permissions, SMS_REQUEST);
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.S_V2) {
+            addIfMissing(permissions, Manifest.permission.READ_EXTERNAL_STORAGE);
+        }
+        if (!permissions.isEmpty()) {
+            requestPermissions(permissions.toArray(new String[0]), STARTUP_REQUEST);
+        }
+    }
+
+    private void addIfMissing(List<String> permissions, String permission) {
+        if (checkSelfPermission(permission) != PackageManager.PERMISSION_GRANTED) {
+            permissions.add(permission);
+        }
     }
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == SMS_REQUEST && webView != null) {
+        if (requestCode == STARTUP_REQUEST && webView != null) {
             webView.postDelayed(() -> webView.evaluateJavascript(
                     "window.TransacPermissionResult && window.TransacPermissionResult()", null), 250);
         }

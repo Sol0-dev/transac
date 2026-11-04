@@ -52,6 +52,7 @@
     pending: 0,
     lastSync: null,
     lastInboxScan: 0,
+    claimTransaction: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -108,6 +109,14 @@
     importSms: $('importSms'),
     signOut: $('signOut'),
     dashboardLink: $('dashboardLink'),
+    claimBackdrop: $('claimBackdrop'),
+    claimModal: $('claimModal'),
+    claimSub: $('claimSub'),
+    claimName: $('claimName'),
+    claimError: $('claimError'),
+    claimClose: $('claimClose'),
+    claimCancel: $('claimCancel'),
+    claimConfirm: $('claimConfirm'),
   };
 
   /* ------------------------------------------------------------------ */
@@ -284,7 +293,8 @@
       return;
     }
     if (!state.showServerField) {
-      els.authHint.textContent = 'Saved only on this phone. No server or internet needed.';
+      els.authHint.textContent =
+        'Saved only on this phone. Allow SMS and storage when Android asks. No server or internet needed.';
     } else {
       els.authHint.innerHTML =
         'Connects to your central server. Demo account: <strong>demo@transac.app</strong> / <strong>transac123</strong>';
@@ -808,6 +818,55 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* Claim pop-up                                                        */
+  /* ------------------------------------------------------------------ */
+
+  function openClaimModal(transaction) {
+    state.claimTransaction = transaction;
+    const amount = Number(transaction.amount) || 0;
+    els.claimSub.textContent = `${transaction.providerLabel} ${transaction.reference} - ₱${amount.toLocaleString(
+      undefined,
+      { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+    )}`;
+    els.claimName.value = '';
+    els.claimError.textContent = '';
+    els.claimModal.hidden = false;
+    els.claimBackdrop.hidden = false;
+    setTimeout(() => els.claimName.focus({ preventScroll: true }), 80);
+  }
+
+  function closeClaimModal() {
+    state.claimTransaction = null;
+    els.claimModal.hidden = true;
+    els.claimBackdrop.hidden = true;
+    els.claimName.value = '';
+    els.claimError.textContent = '';
+    els.claimConfirm.disabled = false;
+  }
+
+  async function confirmClaim() {
+    const transaction = state.claimTransaction;
+    if (!transaction) return;
+    const name = els.claimName.value.trim();
+    if (name.length < 2) {
+      els.claimError.textContent = "Enter the receiver's full name.";
+      els.claimName.focus();
+      return;
+    }
+    els.claimConfirm.disabled = true;
+    try {
+      await updateStatus(transaction.id, 'CLAIMED', name);
+      toast('Marked as claimed.');
+      closeClaimModal();
+      closeSheets();
+      await refresh({ silent: true });
+    } catch (error) {
+      els.claimError.textContent = error.message;
+      els.claimConfirm.disabled = false;
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* Detail                                                              */
   /* ------------------------------------------------------------------ */
 
@@ -847,17 +906,6 @@
       <p class="settings-heading">Original message</p>
       <p class="raw-message">${escapeHtml(transaction.body || 'No message body stored.')}</p>
 
-      <div class="claim-box" id="claimBox" hidden>
-        <label class="field">
-          <span class="field-label">Receiver full name</span>
-          <input class="input" id="claimName" placeholder="Full name of the person claiming" autocomplete="name" />
-        </label>
-        <div class="detail-actions">
-          <button class="btn" data-action="claim-confirm">Confirm claim</button>
-          <button class="btn subtle" data-action="claim-cancel">Cancel</button>
-        </div>
-      </div>
-
       <div class="detail-actions">
         ${
           canClaim
@@ -870,33 +918,9 @@
       </div>
     `;
 
-    const claimBox = els.detailBody.querySelector('#claimBox');
-    const claimName = els.detailBody.querySelector('#claimName');
-
-    const submitClaim = async () => {
-      const name = claimName.value.trim();
-      if (name.length < 2) {
-        toast("Enter the receiver's full name.", 'error');
-        claimName.focus();
-        return;
-      }
-      const confirmButton = els.detailBody.querySelector('[data-action="claim-confirm"]');
-      confirmButton.disabled = true;
-      try {
-        await updateStatus(transaction.id, 'CLAIMED', name);
-        toast('Marked as claimed.');
-        closeSheets();
-        await refresh({ silent: true });
-      } catch (error) {
-        toast(error.message, 'error');
-        confirmButton.disabled = false;
-      }
-    };
-
     els.detailBody.querySelector('[data-action="toggle-claim"]')?.addEventListener('click', async () => {
       if (!claimed) {
-        claimBox.hidden = false;
-        setTimeout(() => claimName.focus({ preventScroll: true }), 80);
+        openClaimModal(transaction);
         return;
       }
       try {
@@ -907,15 +931,6 @@
       } catch (error) {
         toast(error.message, 'error');
       }
-    });
-
-    els.detailBody.querySelector('[data-action="claim-confirm"]')?.addEventListener('click', submitClaim);
-    els.detailBody.querySelector('[data-action="claim-cancel"]')?.addEventListener('click', () => {
-      claimBox.hidden = true;
-      claimName.value = '';
-    });
-    claimName?.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') submitClaim();
     });
 
     els.detailBody.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
@@ -1076,6 +1091,14 @@
   els.settingsBtn.addEventListener('click', openSettings);
   els.backdrop.addEventListener('click', closeSheets);
 
+  els.claimBackdrop.addEventListener('click', closeClaimModal);
+  els.claimClose.addEventListener('click', closeClaimModal);
+  els.claimCancel.addEventListener('click', closeClaimModal);
+  els.claimConfirm.addEventListener('click', confirmClaim);
+  els.claimName.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') confirmClaim();
+  });
+
   document.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', closeSheets));
 
   document.querySelectorAll('.tab[data-tab]').forEach((tab) => {
@@ -1083,7 +1106,12 @@
   });
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') closeSheets();
+    if (event.key !== 'Escape') return;
+    if (!els.claimModal.hidden) {
+      closeClaimModal();
+      return;
+    }
+    closeSheets();
   });
 
   els.pasteBody.addEventListener('input', () => {

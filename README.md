@@ -18,7 +18,7 @@ works without a server, data connection, or Wi-Fi.
 - **Scans existing SMS** on first sign-in, on every app open, after the permission is granted, and every few minutes while the app is open. Old or missed transactions are captured too.
 - **Parses GCash and Maya messages** into provider, reference number, amount, direction, sender, and status.
 - **Keeps everything on the phone** in a local SQLite ledger. No server, internet, or Wi-Fi is required.
-- **Includes the control center in the APK**: totals, search, filters, receiver names, and a copy-to-clipboard CSV export.
+- **Includes the control center in the APK**: totals, search, filters, receiver names, and CSV export to Downloads.
 - **Requires the receiver's full name when marking a transaction as claimed**, so every claim records who received the money.
 - **Deduplicates by reference number**, so the same SMS is never logged twice.
 - **Signs up and signs in locally** with an email/password account that stays on the device.
@@ -28,7 +28,7 @@ works without a server, data connection, or Wi-Fi.
 
 1. Download `transac.apk` on the Android phone.
 2. Open it and allow **Install unknown apps** for the browser or file manager when prompted.
-3. Open **TRANSAC** and allow the **SMS** permission.
+3. Open **TRANSAC** and allow the **SMS** and **storage** permissions when Android asks. Android 10 and newer manage storage automatically, so only the SMS prompt may appear.
 4. On first launch, choose **Sign up**, enter a name, email, and password, and tap **Create account**. This creates a local account on the phone.
 5. The app scans existing GCash/Maya messages and shows them in the ledger. New messages appear automatically.
 6. Tap the avatar, then **Open control center**, to see the built-in dashboard.
@@ -64,9 +64,18 @@ The transaction appears in the ledger and in the on-phone control center within 
 3. Enter the receiving person's full name.
 4. Tap **Confirm claim**.
 
-The transaction becomes `CLAIMED`, and the receiver's full name and claim time are stored with
-it. The control center shows the receiver in its own column. If the phone is later connected to
-the optional server, claim changes are pushed on the next sync.
+<p align="center">
+  <img src="docs/screenshots/claim-popup.png" alt="Receiver full name pop-up" width="320" />
+</p>
+
+The receiver name card is a centered pop-up over the transaction. The transaction becomes
+`CLAIMED`, and the receiver's full name and claim time are stored with it. The control center
+shows the receiver in its own column. If the phone is later connected to the optional server,
+claim changes are pushed on the next sync.
+
+The control center's **Export CSV** writes `transac-logs-YYYY-MM-DD.csv` to the phone's
+Downloads folder. Android 10 and newer use scoped storage, so no storage permission is needed;
+older versions ask for storage access once.
 
 ## Optional central server
 

@@ -200,7 +200,7 @@
         link.removeAttribute('target');
         link.textContent = 'Mobile app';
       }
-      els.exportBtn.textContent = 'Copy CSV';
+      els.exportBtn.textContent = 'Export CSV';
       els.devicesTitle.textContent = 'This phone';
       els.devicesNote.textContent = 'Every transaction stored on this device.';
     }
@@ -464,9 +464,10 @@
     }
     const csvText = lines.join('\n');
     if (isNative) {
-      const result = callNative('copyText', csvText);
-      if (!result.ok) toast(result.error || 'Could not copy the CSV.', 'error');
-      else toast(`Copied ${rows.length} log(s) as CSV.`);
+      const filename = `transac-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+      const result = callNative('saveCsv', filename, csvText);
+      if (!result.ok) toast(result.error || 'Could not save the CSV.', 'error');
+      else toast(`Saved ${rows.length} log(s) to ${result.path || 'Downloads'}.`);
       return;
     }
 
