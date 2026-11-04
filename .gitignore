@@ -1,0 +1,13 @@
+node_modules/
+data/
+.playwright-mcp/
+*.log
+
+# Generated Android build output (the signed APK in dist/ is committed)
+android-app/build/
+android-app/assets/www/
+android-app/res/drawable/appicon.png
+
+dist/*.idsig
+.DS_Store
+Thumbs.db

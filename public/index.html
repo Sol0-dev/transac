@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1266e3" />
+    <meta name="description" content="TRANSAC automatically logs GCash and Maya transactions from SMS into one centralized ledger." />
+    <title>TRANSAC - Automated Log Solution</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <!-- Sign in / sign up -->
+    <div class="auth-screen" id="authScreen" aria-hidden="false">
+      <div class="auth-top">
+        <div class="brand-word"><span>T</span>RANSAC</div>
+        <div class="brand-sub">AUTOMATED LOG SOLUTION</div>
+        <p class="auth-tagline">Every GCash and Maya transaction, in one place.</p>
+      </div>
+      <div class="auth-card">
+        <div class="tabs auth-tabs" role="tablist">
+          <button class="tab active" type="button" id="authTabSignin">Sign in</button>
+          <button class="tab" type="button" id="authTabSignup">Sign up</button>
+        </div>
+
+        <label class="field" id="authServerField">
+          <span class="field-label">Central server URL</span>
+          <input class="input" id="authServerUrl" placeholder="http://192.168.1.10:3000" autocomplete="url" />
+        </label>
+        <label class="field auth-signup-only" hidden>
+          <span class="field-label">Full name</span>
+          <input class="input" id="authName" placeholder="Juan Dela Cruz" autocomplete="name" />
+        </label>
+        <label class="field">
+          <span class="field-label">Email</span>
+          <input class="input" id="authEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+        </label>
+        <label class="field">
+          <span class="field-label">Password</span>
+          <input class="input" id="authPassword" type="password" placeholder="At least 8 characters" autocomplete="current-password" />
+        </label>
+
+        <p class="auth-error" id="authError" role="alert"></p>
+        <button class="btn block" id="authSubmit" type="button">Sign in</button>
+        <p class="auth-hint" id="authHint">
+          Demo account: <strong>demo@transac.app</strong> / <strong>transac123</strong>
+        </p>
+      </div>
+    </div>
+
+    <div class="app-shell" id="app">
+      <header class="app-header">
+        <div class="brand">
+          <div class="brand-word"><span>T</span>RANSAC</div>
+          <div class="brand-sub">AUTOMATED LOG SOLUTION</div>
+        </div>
+        <button class="avatar" id="settingsBtn" type="button" aria-label="Device and sync settings">AL</button>
+      </header>
+
+      <div class="search-wrap">
+        <label class="search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" />
+            <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+          </svg>
+          <input
+            id="searchInput"
+            type="search"
+            inputmode="search"
+            placeholder="Search Reference No., Date"
+            autocomplete="off"
+            aria-label="Search Reference No., Date"
+          />
+          <button class="search-clear" id="clearSearch" type="button" aria-label="Clear search">×</button>
+        </label>
+        <div class="sync-line">
+          <span class="dot" id="connectionDot"></span>
+          <span id="connectionText">Connected</span>
+          <span class="device-name" id="deviceLabel">This phone</span>
+        </div>
+      </div>
+
+      <main class="tx-list" id="txList" aria-live="polite">
+        <div class="list-section" id="listSection">Recent transactions</div>
+        <div id="txRows"></div>
+        <div class="empty" id="emptyState">
+          <div class="empty-icon" aria-hidden="true">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+              <path d="M4 7h16M4 12h16M4 17h10" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+          </div>
+          <strong>No transactions yet</strong>
+          <span>Tap the + button to paste a GCash or Maya SMS, or let the SMS forwarder log them automatically.</span>
+        </div>
+      </main>
+
+      <div class="bottom-bar">
+        <button class="add-btn" id="addBtn" type="button" aria-label="Log a transaction"><span>+</span></button>
+      </div>
+
+      <div class="sheet-backdrop" id="backdrop"></div>
+
+      <!-- Log transaction -->
+      <section class="sheet" id="logSheet" aria-hidden="true" aria-labelledby="logTitle">
+        <div class="sheet-head">
+          <div class="sheet-title" id="logTitle">Log transaction</div>
+          <button class="sheet-close" type="button" data-close aria-label="Close">×</button>
+        </div>
+        <div class="sheet-body">
+          <div class="tabs" role="tablist">
+            <button class="tab active" type="button" role="tab" data-tab="paste">Paste SMS</button>
+            <button class="tab" type="button" role="tab" data-tab="manual">Manual</button>
+            <button class="tab" type="button" role="tab" data-tab="demo">Demo</button>
+          </div>
+
+          <div class="panel active" id="panel-paste" role="tabpanel">
+            <label class="field">
+              <span class="field-label">Sender (optional)</span>
+              <input class="input" id="pasteSender" placeholder="GCash, Maya, +63917…" />
+            </label>
+            <label class="field">
+              <span class="field-label">SMS message</span>
+              <textarea
+                class="textarea"
+                id="pasteBody"
+                placeholder="Paste the GCash or Maya text message here…"
+              ></textarea>
+            </label>
+            <div class="preview empty-preview" id="pastePreview">Paste a message to preview what TRANSAC will read.</div>
+            <button class="btn block" id="pasteSubmit" type="button">Log this message</button>
+          </div>
+
+          <div class="panel" id="panel-manual" role="tabpanel">
+            <div class="row-2">
+              <label class="field">
+                <span class="field-label">Provider</span>
+                <select class="select" id="manualProvider">
+                  <option value="gcash">GCash</option>
+                  <option value="maya">Maya</option>
+                  <option value="unknown">Other</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="field-label">Direction</span>
+                <select class="select" id="manualDirection">
+                  <option value="credit">Received (+)</option>
+                  <option value="debit">Sent (−)</option>
+                </select>
+              </label>
+            </div>
+            <div class="row-2">
+              <label class="field">
+                <span class="field-label">Amount (PHP)</span>
+                <input class="input" id="manualAmount" type="number" min="0.01" step="0.01" inputmode="decimal" placeholder="500.00" />
+              </label>
+              <label class="field">
+                <span class="field-label">Reference no.</span>
+                <input class="input" id="manualRef" inputmode="numeric" placeholder="6028871884223" />
+              </label>
+            </div>
+            <label class="field">
+              <span class="field-label">From / to (optional)</span>
+              <input class="input" id="manualParty" placeholder="Juan Dela Cruz" />
+            </label>
+            <label class="field">
+              <span class="field-label">Date and time</span>
+              <input class="input" id="manualDate" type="datetime-local" />
+            </label>
+            <button class="btn block" id="manualSubmit" type="button">Save transaction</button>
+          </div>
+
+          <div class="panel" id="panel-demo" role="tabpanel">
+            <p class="settings-note" style="margin-bottom: 12px">
+              Sample SMS bodies from GCash and Maya. Each one is parsed with the same rules used for real messages.
+            </p>
+            <div id="demoList"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Transaction detail -->
+      <section class="sheet" id="detailSheet" aria-hidden="true" aria-labelledby="detailTitle">
+        <div class="sheet-head">
+          <div class="sheet-title" id="detailTitle">Transaction</div>
+          <button class="sheet-close" type="button" data-close aria-label="Close">×</button>
+        </div>
+        <div class="sheet-body" id="detailBody"></div>
+      </section>
+
+      <!-- Settings -->
+      <section class="sheet" id="settingsSheet" aria-hidden="true" aria-labelledby="settingsTitle">
+        <div class="sheet-head">
+          <div class="sheet-title" id="settingsTitle">Device &amp; sync</div>
+          <button class="sheet-close" type="button" data-close aria-label="Close">×</button>
+        </div>
+        <div class="sheet-body">
+          <label class="field">
+            <span class="field-label">Device name</span>
+            <input class="input" id="deviceNameInput" placeholder="e.g. Juan's phone" />
+          </label>
+          <label class="field" id="settingsServerField">
+            <span class="field-label">Central logging server</span>
+            <input class="input" id="serverUrlInput" placeholder="Same server (recommended)" autocomplete="off" />
+          </label>
+
+          <div class="settings-block">
+            <p class="settings-heading">Device ID</p>
+            <p class="settings-value" id="deviceIdValue">-</p>
+          </div>
+          <div class="settings-block">
+            <p class="settings-heading">Connection</p>
+            <p class="settings-note" id="settingsConnection">Checking…</p>
+          </div>
+          <div class="settings-block">
+            <p class="settings-heading">Offline queue</p>
+            <p class="settings-note"><span id="queueCount">0</span> message(s) waiting to sync.</p>
+          </div>
+
+          <div style="display: grid; gap: 9px; margin-top: 16px">
+            <button class="btn block" id="saveSettings" type="button">Save settings</button>
+            <button class="btn ghost block" id="syncNow" type="button">Sync now</button>
+            <button class="btn ghost block native-only" id="importSms" type="button" hidden>Import recent SMS</button>
+            <a class="btn subtle block" id="dashboardLink" href="/dashboard" target="_blank" rel="noopener">
+              Open control center
+            </a>
+            <button class="btn danger block" id="signOut" type="button">Sign out</button>
+          </div>
+          <p class="settings-note" style="margin-top: 14px">
+            The control center shows every transaction from every connected phone in one place. On Android,
+            allow the SMS permission so TRANSAC can read GCash and Maya messages automatically.
+          </p>
+        </div>
+      </section>
+
+      <div class="toast" id="toast" role="status"></div>
+    </div>
+
+    <script src="app.js" defer></script>
+  </body>
+</html>

@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1266e3" />
+    <title>TRANSAC - Control Center</title>
+    <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="dashboard.css" />
+  </head>
+  <body>
+    <!-- Sign in -->
+    <div class="gate" id="gate">
+      <div class="gate-brand">
+        <div class="wordmark"><span>T</span>RANSAC</div>
+        <div class="wordmark-sub">CONTROL CENTER</div>
+      </div>
+      <div class="gate-card">
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabSignin" type="button">Sign in</button>
+          <button class="auth-tab" id="tabSignup" type="button">Sign up</button>
+        </div>
+        <label class="field" id="gateNameField" hidden>
+          <span>Full name</span>
+          <input id="gateName" type="text" placeholder="Juan Dela Cruz" autocomplete="name" />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input id="gateEmail" type="email" placeholder="you@example.com" autocomplete="email" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="gatePassword" type="password" placeholder="At least 8 characters" autocomplete="current-password" />
+        </label>
+        <p class="gate-error" id="gateError" role="alert"></p>
+        <button class="btn block" id="gateSubmit" type="button">Sign in</button>
+        <p class="gate-hint">Demo - <strong>demo@transac.app</strong> / <strong>transac123</strong></p>
+      </div>
+    </div>
+
+    <!-- Control center -->
+    <div class="shell" id="shell" hidden>
+      <header class="topbar">
+        <div class="topbar-brand">
+          <div class="wordmark"><span>T</span>RANSAC</div>
+          <div class="wordmark-sub">CONTROL CENTER</div>
+        </div>
+        <div class="topbar-right">
+          <span class="live"><span class="live-dot" id="liveDot"></span><span id="liveText">Live</span></span>
+          <a class="topbar-link" href="/" target="_blank" rel="noopener">Mobile app ↗</a>
+          <div class="user-chip">
+            <span class="user-avatar" id="userAvatar">AL</span>
+            <span class="user-name" id="userName">-</span>
+          </div>
+          <button class="icon-btn" id="logoutBtn" type="button" title="Sign out" aria-label="Sign out">⎋</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="stats" aria-label="Summary">
+          <article class="stat">
+            <span class="stat-label">Total logs</span>
+            <strong class="stat-value" id="statTotal">0</strong>
+            <span class="stat-note" id="statTotalNote">All transactions</span>
+          </article>
+          <article class="stat">
+            <span class="stat-label">Unclaimed</span>
+            <strong class="stat-value green" id="statUnclaimed">0</strong>
+            <span class="stat-note">Waiting to be claimed</span>
+          </article>
+          <article class="stat">
+            <span class="stat-label">Received</span>
+            <strong class="stat-value" id="statReceived">₱0</strong>
+            <span class="stat-note">GCash + Maya credits</span>
+          </article>
+          <article class="stat">
+            <span class="stat-label">Devices</span>
+            <strong class="stat-value" id="statDevices">0</strong>
+            <span class="stat-note" id="statDevicesNote">Phones connected</span>
+          </article>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>All transactions</h2>
+              <p id="tableNote">Every message parsed from every connected phone.</p>
+            </div>
+            <div class="toolbar">
+              <input id="search" type="search" placeholder="Search reference, sender, device…" aria-label="Search" />
+              <select id="statusFilter" aria-label="Filter by status">
+                <option value="all">All status</option>
+                <option value="UNCLAIMED">Unclaimed</option>
+                <option value="CLAIMED">Claimed</option>
+                <option value="SENT">Sent</option>
+              </select>
+              <select id="providerFilter" aria-label="Filter by provider">
+                <option value="all">All providers</option>
+                <option value="gcash">GCash</option>
+                <option value="maya">Maya</option>
+              </select>
+              <button class="btn ghost" id="exportBtn" type="button">Export CSV</button>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Provider</th>
+                  <th>Reference</th>
+                  <th class="num">Amount</th>
+                  <th>Status</th>
+                  <th>Device</th>
+                  <th>From / to</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="rows"></tbody>
+            </table>
+            <div class="table-empty" id="tableEmpty" hidden>No transactions match these filters.</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <h2>Connected devices</h2>
+              <p>Phones and browsers logging into this account.</p>
+            </div>
+          </div>
+          <div class="devices" id="devices"></div>
+        </section>
+
+        <footer class="foot">
+          <span>TRANSAC · Automated Log Solution</span>
+          <span id="lastRefresh">-</span>
+        </footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status"></div>
+    <script src="dashboard.js" defer></script>
+  </body>
+</html>
