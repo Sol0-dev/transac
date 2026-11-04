@@ -45,11 +45,13 @@
     hasLocalAccount: false,
     localEmail: '',
     localName: '',
+    showServerField: false,
     activeSheet: null,
     previewTimer: null,
     refreshTimer: null,
     pending: 0,
     lastSync: null,
+    lastInboxScan: 0,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -65,7 +67,8 @@
     authPassword: $('authPassword'),
     authError: $('authError'),
     authSubmit: $('authSubmit'),
-    authLocal: $('authLocal'),
+    authServerToggle: $('authServerToggle'),
+    authHint: $('authHint'),
     settingsBtn: $('settingsBtn'),
     searchInput: $('searchInput'),
     clearSearch: $('clearSearch'),
@@ -275,9 +278,29 @@
     if (mode === 'signin') els.authEmail.focus({ preventScroll: true });
   }
 
+  function updateAuthHint() {
+    if (!isNative) {
+      els.authHint.innerHTML = 'Demo account: <strong>demo@transac.app</strong> / <strong>transac123</strong>';
+      return;
+    }
+    if (!state.showServerField) {
+      els.authHint.textContent = 'Saved only on this phone. No server or internet needed.';
+    } else {
+      els.authHint.innerHTML =
+        'Connects to your central server. Demo account: <strong>demo@transac.app</strong> / <strong>transac123</strong>';
+    }
+  }
+
+  function setServerField(visible) {
+    state.showServerField = Boolean(visible);
+    els.authServerField.hidden = !state.showServerField;
+    els.authServerToggle.textContent = state.showServerField ? 'Use this phone only' : 'Use a central server';
+    if (!state.showServerField) els.authServerUrl.value = '';
+    updateAuthHint();
+  }
+
   function showAuth(message) {
     closeSheets();
-    setAuthMode('signin');
     if (isNative) {
       const status = callNative('getStatus');
       if (status && status.serverUrl) state.serverUrl = status.serverUrl;
@@ -286,9 +309,14 @@
       state.localName = (status && status.localName) || state.localName;
       if (state.localEmail && !els.authEmail.value) els.authEmail.value = state.localEmail;
       if (state.localName && !els.authName.value) els.authName.value = state.localName;
-      els.authLocal.textContent = state.hasLocalAccount ? 'Sign in on this phone' : 'Create a local account';
+      setAuthMode(state.hasLocalAccount || state.serverUrl ? 'signin' : 'signup');
+      setServerField(Boolean(state.serverUrl));
+      els.authServerUrl.value = state.serverUrl || '';
+    } else {
+      setAuthMode('signin');
+      els.authServerField.hidden = true;
     }
-    els.authServerUrl.value = state.serverUrl || '';
+    updateAuthHint();
     els.authScreen.classList.remove('hidden');
     els.authScreen.setAttribute('aria-hidden', 'false');
     els.authError.textContent = message || '';
@@ -308,6 +336,14 @@
     let serverUrl = isNative ? els.authServerUrl.value.trim().replace(/\/+$/, '') : '';
 
     els.authError.textContent = '';
+    if (isNative && !state.showServerField && !serverUrl) {
+      await submitLocalAuth();
+      return;
+    }
+    if (isNative && !serverUrl) {
+      els.authError.textContent = 'Enter the server URL, e.g. http://192.168.1.10:3000';
+      return;
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       els.authError.textContent = 'Enter a valid email address.';
       return;
@@ -386,7 +422,8 @@
       return;
     }
 
-    els.authLocal.disabled = true;
+    els.authSubmit.disabled = true;
+    els.authSubmit.textContent = 'Please wait...';
     try {
       const result = callNative('localAuth', mode, name, email, password);
       if (!result.ok) throw new Error(result.error || 'Could not open the local account.');
@@ -398,11 +435,12 @@
       els.authPassword.value = '';
       hideAuth();
       await afterAuth();
-      toast('Offline mode: logs are saved on this phone.');
+      toast('Saved on this phone. No server needed.');
     } catch (error) {
       els.authError.textContent = error.message || 'Something went wrong.';
     } finally {
-      els.authLocal.disabled = false;
+      els.authSubmit.disabled = false;
+      els.authSubmit.textContent = mode === 'signin' ? 'Sign in' : 'Create account';
     }
   }
 
@@ -464,6 +502,7 @@
       setConnection(ok);
     }
     await refresh({ silent: true });
+    if (isNative) await autoImportInbox();
   }
 
   function updateAvatar() {
@@ -569,18 +608,25 @@
 
   function setConnection(online) {
     state.online = Boolean(online);
+    const localOnly = isNative && !state.serverUrl;
     els.connectionDot.classList.toggle('offline', !online);
-    if (online) {
-      els.connectionText.textContent = state.pending ? `Online · ${state.pending} queued` : 'Connected';
+    if (localOnly) {
+      els.connectionText.textContent = state.pending
+        ? `Local mode - ${state.pending} saved`
+        : 'Local mode - saved on device';
+    } else if (online) {
+      els.connectionText.textContent = state.pending ? `Online - ${state.pending} queued` : 'Connected';
     } else {
       els.connectionText.textContent = state.pending
-        ? `Offline · ${state.pending} queued`
-        : 'Offline · saved on this device';
+        ? `Offline - ${state.pending} queued`
+        : 'Offline - saved on this device';
     }
     els.deviceLabel.textContent = state.deviceName;
-    els.settingsConnection.textContent = online
-      ? 'Connected to the central logging platform.'
-      : 'Working offline. New logs stay on this device until the server is reachable.';
+    els.settingsConnection.textContent = localOnly
+      ? 'Local mode: no server connected. Logs stay on this phone.'
+      : online
+        ? 'Connected to the central logging platform.'
+        : 'Working offline. New logs stay on this device until the server is reachable.';
   }
 
   /* ------------------------------------------------------------------ */
@@ -666,6 +712,16 @@
     }
   }
 
+  async function autoImportInbox() {
+    if (!isNative || !state.user) return;
+    if (Date.now() - state.lastInboxScan < 5 * 60 * 1000) return;
+    state.lastInboxScan = Date.now();
+    const result = callNative('importInbox', '0');
+    if (result && result.ok && Number(result.imported) > 0) {
+      await refresh({ silent: true });
+    }
+  }
+
   async function parseSms(sender, body) {
     if (isNative) return callNative('parse', sender, body);
     return webApi('/api/parse', { method: 'POST', body: JSON.stringify({ sender, body }) });
@@ -738,9 +794,12 @@
     }
   }
 
-  async function updateStatus(id, status) {
-    if (isNative) return callNative('updateStatus', id, status);
-    return webApi(`/api/transactions/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) });
+  async function updateStatus(id, status, claimedBy) {
+    if (isNative) return callNative('updateStatus', id, status, claimedBy || '');
+    return webApi(`/api/transactions/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, claimedBy: claimedBy || '' }),
+    });
   }
 
   async function removeTransaction(id) {
@@ -775,10 +834,29 @@
         <div><dt>From / to</dt><dd>${escapeHtml(transaction.counterparty || 'N/A')}</dd></div>
         <div><dt>Received</dt><dd>${escapeHtml(new Date(transaction.receivedAt).toLocaleString())}</dd></div>
         <div><dt>Logged by</dt><dd>${escapeHtml(transaction.deviceName || 'Unknown')}</dd></div>
+        ${
+          transaction.claimedBy
+            ? `<div><dt>Claimed by</dt><dd>${escapeHtml(transaction.claimedBy)}</dd></div>
+               <div><dt>Claimed at</dt><dd>${escapeHtml(
+                 transaction.claimedAt ? new Date(transaction.claimedAt).toLocaleString() : 'N/A',
+               )}</dd></div>`
+            : ''
+        }
       </dl>
 
       <p class="settings-heading">Original message</p>
       <p class="raw-message">${escapeHtml(transaction.body || 'No message body stored.')}</p>
+
+      <div class="claim-box" id="claimBox" hidden>
+        <label class="field">
+          <span class="field-label">Receiver full name</span>
+          <input class="input" id="claimName" placeholder="Full name of the person claiming" autocomplete="name" />
+        </label>
+        <div class="detail-actions">
+          <button class="btn" data-action="claim-confirm">Confirm claim</button>
+          <button class="btn subtle" data-action="claim-cancel">Cancel</button>
+        </div>
+      </div>
 
       <div class="detail-actions">
         ${
@@ -792,15 +870,52 @@
       </div>
     `;
 
-    els.detailBody.querySelector('[data-action="toggle-claim"]')?.addEventListener('click', async () => {
+    const claimBox = els.detailBody.querySelector('#claimBox');
+    const claimName = els.detailBody.querySelector('#claimName');
+
+    const submitClaim = async () => {
+      const name = claimName.value.trim();
+      if (name.length < 2) {
+        toast("Enter the receiver's full name.", 'error');
+        claimName.focus();
+        return;
+      }
+      const confirmButton = els.detailBody.querySelector('[data-action="claim-confirm"]');
+      confirmButton.disabled = true;
       try {
-        await updateStatus(transaction.id, claimed ? 'UNCLAIMED' : 'CLAIMED');
-        toast(claimed ? 'Marked as unclaimed.' : 'Marked as claimed.');
+        await updateStatus(transaction.id, 'CLAIMED', name);
+        toast('Marked as claimed.');
+        closeSheets();
+        await refresh({ silent: true });
+      } catch (error) {
+        toast(error.message, 'error');
+        confirmButton.disabled = false;
+      }
+    };
+
+    els.detailBody.querySelector('[data-action="toggle-claim"]')?.addEventListener('click', async () => {
+      if (!claimed) {
+        claimBox.hidden = false;
+        setTimeout(() => claimName.focus({ preventScroll: true }), 80);
+        return;
+      }
+      try {
+        await updateStatus(transaction.id, 'UNCLAIMED', '');
+        toast('Marked as unclaimed.');
         closeSheets();
         await refresh({ silent: true });
       } catch (error) {
         toast(error.message, 'error');
       }
+    });
+
+    els.detailBody.querySelector('[data-action="claim-confirm"]')?.addEventListener('click', submitClaim);
+    els.detailBody.querySelector('[data-action="claim-cancel"]')?.addEventListener('click', () => {
+      claimBox.hidden = true;
+      claimName.value = '';
+    });
+    claimName?.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') submitClaim();
     });
 
     els.detailBody.querySelector('[data-action="delete"]')?.addEventListener('click', async () => {
@@ -900,10 +1015,15 @@
     els.deviceNameInput.value = state.deviceName;
     els.serverUrlInput.value = state.serverUrl || '';
     els.deviceIdValue.textContent = state.deviceId || device.id;
-    els.dashboardLink.href = `${(state.serverUrl || '').replace(/\/+$/, '')}/dashboard`;
-    els.settingsConnection.textContent = state.online
-      ? 'Connected to the central logging platform.'
-      : 'Working offline. New logs stay on this device until the server is reachable.';
+    els.dashboardLink.href = isNative
+      ? 'dashboard.html'
+      : `${(state.serverUrl || '').replace(/\/+$/, '')}/dashboard`;
+    els.settingsConnection.textContent =
+      isNative && !state.serverUrl
+        ? 'Local mode: no server connected. Logs stay on this phone.'
+        : state.online
+          ? 'Connected to the central logging platform.'
+          : 'Working offline. New logs stay on this device until the server is reachable.';
     updatePending(state.pending);
     openSheet('settingsSheet');
   }
@@ -915,7 +1035,13 @@
   els.authTabSignin.addEventListener('click', () => setAuthMode('signin'));
   els.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
   els.authSubmit.addEventListener('click', submitAuth);
-  els.authLocal.addEventListener('click', submitLocalAuth);
+  els.authServerToggle.addEventListener('click', () => {
+    setServerField(!state.showServerField);
+    if (state.showServerField) {
+      setTimeout(() => els.authServerUrl.focus({ preventScroll: true }), 60);
+    }
+  });
+  els.authServerUrl.addEventListener('input', updateAuthHint);
   [els.authEmail, els.authPassword, els.authName, els.authServerUrl].forEach((input) => {
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') submitAuth();
@@ -1031,7 +1157,11 @@
       }
       if (result.signedOut) {
         closeSheets();
-        await signOut('Server changed. Sign in again to connect to the new server.');
+        await signOut(
+          serverUrl
+            ? 'Server changed. Sign in again to connect to the new server.'
+            : 'Server removed. Sign in on this phone or add a server again.',
+        );
         return;
       }
       await refresh({ silent: true });
@@ -1054,14 +1184,16 @@
       await new Promise((resolve) => setTimeout(resolve, 900));
       await refresh({ silent: true });
       const status = callNative('getStatus');
-      toast(
-        status.online
-          ? Number(status.pending) > 0
-            ? `${status.pending} log(s) still waiting to upload.`
-            : 'Everything is synced.'
-          : result.error || 'Server unreachable. Logs are safe on this phone.',
-        status.online ? undefined : 'error',
-      );
+      const hasServer = Boolean((status.serverUrl || state.serverUrl || '').trim());
+      if (!hasServer) {
+        toast('Local mode: logs are already saved on this phone.');
+      } else if (status.online && Number(status.pending) === 0) {
+        toast('Everything is synced.');
+      } else if (status.online) {
+        toast(`${status.pending} log(s) still waiting to upload.`);
+      } else {
+        toast(result.error || 'Server unreachable. Logs are safe on this phone.', 'error');
+      }
     } else {
       const sent = await flushQueue();
       const online = await registerWebDevice();
@@ -1074,8 +1206,10 @@
 
   els.importSms.addEventListener('click', async () => {
     if (!isNative) return;
+    state.lastInboxScan = 0;
     els.importSms.disabled = true;
-    const result = callNative('importInbox');
+    const result = callNative('importInbox', '1');
+    state.lastInboxScan = Date.now();
     els.importSms.disabled = false;
     if (!result.ok) {
       toast(result.error || 'Could not read SMS. Check the permission.', 'error');
@@ -1095,17 +1229,6 @@
     await signOut();
   });
 
-  els.dashboardLink.addEventListener('click', (event) => {
-    if (!isNative) return;
-    event.preventDefault();
-    const url = `${(state.serverUrl || '').replace(/\/+$/, '')}/dashboard`;
-    if (!state.serverUrl) {
-      toast('Set the central server URL first.', 'error');
-      return;
-    }
-    callNative('openUrl', url);
-  });
-
   /* ------------------------------------------------------------------ */
   /* Boot                                                                */
   /* ------------------------------------------------------------------ */
@@ -1114,24 +1237,38 @@
     document.querySelectorAll('.native-only').forEach((element) => {
       element.hidden = !isNative;
     });
-    els.authServerField.hidden = !isNative;
+    els.authServerField.hidden = true;
+    els.authServerToggle.textContent = 'Use a central server';
     els.settingsServerField.hidden = !isNative;
+    els.dashboardLink.target = isNative ? '_self' : '_blank';
+    updateAuthHint();
   }
 
   function startBackgroundRefresh() {
     if (state.refreshTimer) return;
     state.refreshTimer = setInterval(() => {
-      if (document.visibilityState === 'visible' && state.user) refresh({ silent: true });
+      if (document.visibilityState === 'visible' && state.user) {
+        refresh({ silent: true });
+        if (isNative) autoImportInbox();
+      }
     }, REFRESH_MS);
 
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && state.user) refresh({ silent: true });
+      if (document.visibilityState === 'visible' && state.user) {
+        refresh({ silent: true });
+        if (isNative) autoImportInbox();
+      }
     });
 
     if ('serviceWorker' in navigator && !isNative) {
       navigator.serviceWorker.register('/sw.js').catch(() => {});
     }
   }
+
+  window.TransacPermissionResult = function () {
+    state.lastInboxScan = 0;
+    autoImportInbox();
+  };
 
   async function boot() {
     applyNativeUI();

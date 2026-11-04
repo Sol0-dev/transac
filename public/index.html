@@ -25,8 +25,8 @@
           <button class="tab" type="button" id="authTabSignup">Sign up</button>
         </div>
 
-        <label class="field" id="authServerField">
-          <span class="field-label">Central server URL</span>
+        <label class="field" id="authServerField" hidden>
+          <span class="field-label">Central server URL (optional)</span>
           <input class="input" id="authServerUrl" placeholder="http://192.168.1.10:3000" autocomplete="url" />
         </label>
         <label class="field auth-signup-only" hidden>
@@ -44,13 +44,8 @@
 
         <p class="auth-error" id="authError" role="alert"></p>
         <button class="btn block" id="authSubmit" type="button">Sign in</button>
-        <button class="btn subtle block native-only" id="authLocal" type="button" hidden>Use this phone only</button>
-        <p class="auth-hint native-only" id="authLocalHint" hidden>
-          No server yet? Log transactions on this phone. They stay in the app and can sync later.
-        </p>
-        <p class="auth-hint" id="authHint">
-          Demo account: <strong>demo@transac.app</strong> / <strong>transac123</strong>
-        </p>
+        <button class="auth-link native-only" id="authServerToggle" type="button" hidden>Use a central server</button>
+        <p class="auth-hint" id="authHint">Saved only on this phone. No server or internet needed.</p>
       </div>
     </div>
 
@@ -205,9 +200,12 @@
             <input class="input" id="deviceNameInput" placeholder="e.g. Juan's phone" />
           </label>
           <label class="field" id="settingsServerField">
-            <span class="field-label">Central logging server</span>
-            <input class="input" id="serverUrlInput" placeholder="Same server (recommended)" autocomplete="off" />
+            <span class="field-label">Central logging server (optional)</span>
+            <input class="input" id="serverUrlInput" placeholder="Only needed for the control center" autocomplete="off" />
           </label>
+          <p class="settings-note" style="margin: -6px 0 12px">
+            Leave this blank to keep everything on this phone. No server or internet is needed.
+          </p>
 
           <div class="settings-block">
             <p class="settings-heading">Device ID</p>
@@ -226,7 +224,7 @@
             <button class="btn block" id="saveSettings" type="button">Save settings</button>
             <button class="btn ghost block" id="syncNow" type="button">Sync now</button>
             <button class="btn ghost block native-only" id="importSms" type="button" hidden>Import recent SMS</button>
-            <a class="btn subtle block" id="dashboardLink" href="/dashboard" target="_blank" rel="noopener">
+            <a class="btn subtle block" id="dashboardLink" href="dashboard.html">
               Open control center
             </a>
             <button class="btn danger block" id="signOut" type="button">Sign out</button>

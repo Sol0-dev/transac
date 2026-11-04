@@ -3,6 +3,21 @@
 (function () {
   const SESSION_KEY = 'transac.session.v1';
   const REFRESH_MS = 8000;
+  const native = window.TransacNative || null;
+  const isNative = Boolean(native);
+
+  function callNative(method, ...args) {
+    if (!native || typeof native[method] !== 'function') {
+      return { ok: false, error: 'Android bridge not available.' };
+    }
+    try {
+      const raw = native[method](...args.map((value) => (value == null ? '' : String(value))));
+      if (!raw) return { ok: false, error: 'Empty native response.' };
+      return typeof raw === 'string' ? JSON.parse(raw) : raw;
+    } catch (error) {
+      return { ok: false, error: error.message || String(error) };
+    }
+  }
 
   const state = {
     token: '',
@@ -16,6 +31,9 @@
     mode: 'signin',
     timer: null,
     lastRefresh: null,
+    deviceId: '',
+    deviceName: 'This phone',
+    pendingClaim: null,
   };
 
   const $ = (id) => document.getElementById(id);
@@ -49,8 +67,17 @@
     tableEmpty: $('tableEmpty'),
     tableNote: $('tableNote'),
     devices: $('devices'),
+    devicesTitle: $('devicesTitle'),
+    devicesNote: $('devicesNote'),
     lastRefresh: $('lastRefresh'),
     toast: $('toast'),
+    claimBackdrop: $('claimBackdrop'),
+    claimModal: $('claimModal'),
+    claimSub: $('claimSub'),
+    claimName: $('claimName'),
+    claimError: $('claimError'),
+    claimCancel: $('claimCancel'),
+    claimConfirm: $('claimConfirm'),
   };
 
   /* ------------------------------ helpers ------------------------------ */
@@ -163,6 +190,20 @@
     els.shell.hidden = false;
     els.userName.textContent = state.user.name;
     els.userAvatar.textContent = initials(state.user.name);
+    if (isNative) {
+      els.logoutBtn.textContent = '←';
+      els.logoutBtn.title = 'Back to the app';
+      els.logoutBtn.setAttribute('aria-label', 'Back to the app');
+      const link = document.querySelector('.topbar-link');
+      if (link) {
+        link.href = 'index.html';
+        link.removeAttribute('target');
+        link.textContent = 'Mobile app';
+      }
+      els.exportBtn.textContent = 'Copy CSV';
+      els.devicesTitle.textContent = 'This phone';
+      els.devicesNote.textContent = 'Every transaction stored on this device.';
+    }
     startRefresh();
   }
 
@@ -235,6 +276,33 @@
   }
 
   async function fetchData(options = {}) {
+    if (isNative) {
+      try {
+        const result = callNative('list', '1000');
+        if (!result.ok) throw new Error(result.error || 'Could not read the local ledger.');
+        state.transactions = Array.isArray(result.transactions) ? result.transactions : [];
+        state.stats = computeStats(state.transactions);
+        state.devices = [
+          {
+            id: state.deviceId,
+            name: state.deviceName || 'This phone',
+            platform: 'android',
+            lastSeen: new Date().toISOString(),
+            count: state.transactions.length,
+          },
+        ];
+        state.lastRefresh = new Date();
+        els.liveDot.classList.remove('off');
+        els.liveText.textContent = 'On this phone';
+        render();
+      } catch (error) {
+        els.liveDot.classList.add('off');
+        els.liveText.textContent = 'Error';
+        if (!options.silent) toast(error.message, 'error');
+      }
+      return;
+    }
+
     try {
       const [stats, transactions, devices] = await Promise.all([
         api('/api/stats'),
@@ -260,6 +328,21 @@
     }
   }
 
+  function computeStats(transactions) {
+    const credits = transactions.filter((transaction) => transaction.direction === 'credit');
+    return {
+      total: transactions.length,
+      unclaimed: transactions.filter((transaction) => transaction.status === 'UNCLAIMED').length,
+      claimed: transactions.filter((transaction) => transaction.status === 'CLAIMED').length,
+      sent: transactions.filter((transaction) => transaction.status === 'SENT').length,
+      receivedAmount: Math.round(credits.reduce((sum, transaction) => sum + Number(transaction.amount || 0), 0) * 100) / 100,
+      gcash: transactions.filter((transaction) => transaction.provider === 'gcash').length,
+      maya: transactions.filter((transaction) => transaction.provider === 'maya').length,
+      devices: 1,
+      onlineDevices: 1,
+    };
+  }
+
   /* ------------------------------ render ------------------------------- */
 
   function filtered() {
@@ -272,6 +355,7 @@
         transaction.reference,
         transaction.providerLabel,
         transaction.counterparty,
+        transaction.claimedBy,
         transaction.deviceName,
         transaction.amount,
         transaction.status,
@@ -290,7 +374,9 @@
     els.statUnclaimed.textContent = String(stats.unclaimed || 0);
     els.statReceived.textContent = money(stats.receivedAmount || 0);
     els.statDevices.textContent = String(stats.devices || 0);
-    els.statDevicesNote.textContent = `${stats.onlineDevices || 0} online now`;
+    els.statDevicesNote.textContent = isNative
+      ? 'This phone'
+      : `${stats.onlineDevices || 0} online now`;
 
     const rows = filtered();
     els.tableNote.textContent = `${rows.length} of ${state.transactions.length} logs shown`;
@@ -311,6 +397,7 @@
           <td><span class="status ${escapeHtml(String(transaction.status).toLowerCase())}">${escapeHtml(
           transaction.status,
         )}</span></td>
+          <td class="party">${escapeHtml(transaction.claimedBy || 'N/A')}</td>
           <td class="device">${escapeHtml(transaction.deviceName || '-')}</td>
           <td class="party" title="${escapeHtml(transaction.counterparty || '')}">${escapeHtml(
           transaction.counterparty || 'N/A',
@@ -345,7 +432,19 @@
 
   function exportCsv() {
     const rows = filtered();
-    const header = ['Received', 'Provider', 'Reference', 'Amount', 'Direction', 'Status', 'Device', 'From/To', 'Message'];
+    const header = [
+      'Received',
+      'Provider',
+      'Reference',
+      'Amount',
+      'Direction',
+      'Status',
+      'Receiver',
+      'Claimed at',
+      'Device',
+      'From/To',
+      'Message',
+    ];
     const lines = [header.join(',')];
     for (const transaction of rows) {
       const values = [
@@ -355,13 +454,23 @@
         transaction.amount,
         transaction.direction,
         transaction.status,
+        transaction.claimedBy || '',
+        transaction.claimedAt || '',
         transaction.deviceName,
         transaction.counterparty || '',
         transaction.body || '',
       ].map((value) => `"${String(value == null ? '' : value).replace(/"/g, '""')}"`);
       lines.push(values.join(','));
     }
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const csvText = lines.join('\n');
+    if (isNative) {
+      const result = callNative('copyText', csvText);
+      if (!result.ok) toast(result.error || 'Could not copy the CSV.', 'error');
+      else toast(`Copied ${rows.length} log(s) as CSV.`);
+      return;
+    }
+
+    const blob = new Blob([csvText], { type: 'text/csv;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -384,7 +493,13 @@
     });
   });
 
-  els.logoutBtn.addEventListener('click', logout);
+  els.logoutBtn.addEventListener('click', () => {
+    if (isNative) {
+      window.location.href = 'index.html';
+      return;
+    }
+    logout();
+  });
   els.search.addEventListener('input', () => {
     state.query = els.search.value;
     render();
@@ -399,26 +514,92 @@
   });
   els.exportBtn.addEventListener('click', exportCsv);
 
-  els.rows.addEventListener('click', async (event) => {
-    const button = event.target.closest('[data-claim]');
-    if (!button) return;
-    button.disabled = true;
+  function openClaim(id) {
+    const transaction = state.transactions.find((item) => item.id === id);
+    if (!transaction) return;
+    state.pendingClaim = transaction;
+    els.claimSub.textContent = `${transaction.providerLabel} ${transaction.reference} · ${money(
+      transaction.amount,
+    )}. Enter the full name of the person who received it.`;
+    els.claimName.value = transaction.claimedBy || '';
+    els.claimError.textContent = '';
+    els.claimModal.hidden = false;
+    els.claimBackdrop.hidden = false;
+    setTimeout(() => els.claimName.focus({ preventScroll: true }), 60);
+  }
+
+  function closeClaim() {
+    state.pendingClaim = null;
+    els.claimModal.hidden = true;
+    els.claimBackdrop.hidden = true;
+    els.claimError.textContent = '';
+    els.claimName.value = '';
+    els.claimConfirm.disabled = false;
+  }
+
+  async function confirmClaim() {
+    const transaction = state.pendingClaim;
+    if (!transaction) return;
+    const name = els.claimName.value.trim();
+    if (name.length < 2) {
+      els.claimError.textContent = "Enter the receiver's full name.";
+      els.claimName.focus();
+      return;
+    }
+    els.claimConfirm.disabled = true;
     try {
-      await api(`/api/transactions/${button.dataset.claim}`, {
-        method: 'PATCH',
-        body: JSON.stringify({ status: 'CLAIMED' }),
-      });
+      if (isNative) {
+        const result = callNative('updateStatus', transaction.id, 'CLAIMED', name);
+        if (!result.ok) throw new Error(result.error || 'Could not save the claim.');
+      } else {
+        await api(`/api/transactions/${transaction.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify({ status: 'CLAIMED', claimedBy: name }),
+        });
+      }
+      closeClaim();
       toast('Marked as claimed.');
       await fetchData({ silent: true });
     } catch (error) {
-      toast(error.message, 'error');
-      button.disabled = false;
+      els.claimError.textContent = error.message;
+      els.claimConfirm.disabled = false;
     }
+  }
+
+  els.rows.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-claim]');
+    if (!button) return;
+    openClaim(button.dataset.claim);
+  });
+
+  els.claimCancel.addEventListener('click', closeClaim);
+  els.claimBackdrop.addEventListener('click', closeClaim);
+  els.claimConfirm.addEventListener('click', confirmClaim);
+  els.claimName.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') confirmClaim();
+  });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeClaim();
   });
 
   /* ------------------------------- boot -------------------------------- */
 
   async function boot() {
+    if (isNative) {
+      const status = callNative('getStatus');
+      if (!status.signedIn) {
+        window.location.replace('index.html');
+        return;
+      }
+      state.user = status.user || { name: 'Phone user' };
+      state.deviceId = status.deviceId || '';
+      state.deviceName = status.deviceName || 'This phone';
+      showShell();
+      callNative('importInbox', '0');
+      await fetchData();
+      return;
+    }
+
     setMode('signin');
     const session = readSession();
     if (!session) {

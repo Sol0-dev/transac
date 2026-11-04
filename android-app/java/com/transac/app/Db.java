@@ -15,7 +15,7 @@ import java.util.UUID;
 public class Db extends SQLiteOpenHelper {
 
     private static final String NAME = "transac.db";
-    private static final int VERSION = 1;
+    private static final int VERSION = 2;
 
     public static final class InsertResult {
         public boolean duplicate;
@@ -48,7 +48,10 @@ public class Db extends SQLiteOpenHelper {
                         + "device_id TEXT,"
                         + "device_name TEXT,"
                         + "source TEXT,"
-                        + "synced INTEGER DEFAULT 0"
+                        + "synced INTEGER DEFAULT 0,"
+                        + "claimed_by TEXT,"
+                        + "claimed_at TEXT,"
+                        + "status_dirty INTEGER DEFAULT 0"
                         + ")");
         db.execSQL("CREATE UNIQUE INDEX idx_transac_dedupe ON transactions(account, provider, reference)");
         db.execSQL("CREATE INDEX idx_transac_received ON transactions(received_at DESC)");
@@ -58,7 +61,11 @@ public class Db extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // First release: no migrations yet.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE transactions ADD COLUMN claimed_by TEXT");
+            db.execSQL("ALTER TABLE transactions ADD COLUMN claimed_at TEXT");
+            db.execSQL("ALTER TABLE transactions ADD COLUMN status_dirty INTEGER DEFAULT 0");
+        }
     }
 
     /* ----------------------------- meta ------------------------------ */
@@ -144,6 +151,9 @@ public class Db extends SQLiteOpenHelper {
         values.put("device_name", tx.deviceName);
         values.put("source", tx.source);
         values.put("synced", tx.synced ? 1 : 0);
+        values.put("claimed_by", tx.claimedBy);
+        values.put("claimed_at", tx.claimedAt);
+        values.put("status_dirty", tx.statusDirty ? 1 : 0);
         return values;
     }
 
@@ -211,12 +221,49 @@ public class Db extends SQLiteOpenHelper {
         return null;
     }
 
-    public boolean updateStatus(String account, String id, String status) {
+    public boolean updateStatus(String account, String id, String status, String claimedBy) {
         if (!allowedStatus(status)) return false;
+        String receiver = claimedBy == null ? "" : claimedBy.trim();
+        if ("CLAIMED".equals(status) && receiver.length() < 2) return false;
+
         ContentValues values = new ContentValues();
         values.put("status", status);
+        values.put("status_dirty", 1);
+        if ("CLAIMED".equals(status)) {
+            values.put("claimed_by", receiver);
+            values.put("claimed_at", Time.nowIso());
+        } else {
+            values.putNull("claimed_by");
+            values.putNull("claimed_at");
+        }
         return getWritableDatabase().update("transactions", values, "account = ? AND id = ?",
                 new String[]{account, id}) > 0;
+    }
+
+    public List<Tx> dirtyStatuses(String account, int limit) {
+        List<Tx> rows = new ArrayList<>();
+        if (account == null || account.isEmpty()) return rows;
+        String size = String.valueOf(Math.max(1, Math.min(100, limit)));
+        try (Cursor cursor = getReadableDatabase().query(
+                "transactions", null, "account = ? AND status_dirty = 1", new String[]{account}, null, null,
+                "received_at ASC", size)) {
+            while (cursor.moveToNext()) rows.add(read(cursor));
+        }
+        return rows;
+    }
+
+    public void markStatusSynced(List<String> ids) {
+        if (ids == null || ids.isEmpty()) return;
+        StringBuilder placeholders = new StringBuilder();
+        String[] args = new String[ids.size()];
+        for (int i = 0; i < ids.size(); i++) {
+            if (i > 0) placeholders.append(',');
+            placeholders.append('?');
+            args[i] = ids.get(i);
+        }
+        ContentValues values = new ContentValues();
+        values.put("status_dirty", 0);
+        getWritableDatabase().update("transactions", values, "id IN (" + placeholders + ")", args);
     }
 
     public boolean delete(String account, String id) {
@@ -247,6 +294,9 @@ public class Db extends SQLiteOpenHelper {
         tx.deviceName = string(cursor, "device_name");
         tx.source = string(cursor, "source");
         tx.synced = cursor.getInt(cursor.getColumnIndexOrThrow("synced")) == 1;
+        tx.claimedBy = string(cursor, "claimed_by");
+        tx.claimedAt = string(cursor, "claimed_at");
+        tx.statusDirty = cursor.getInt(cursor.getColumnIndexOrThrow("status_dirty")) == 1;
         return tx;
     }
 

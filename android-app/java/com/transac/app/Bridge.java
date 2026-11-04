@@ -2,6 +2,9 @@ package com.transac.app;
 
 import android.Manifest;
 import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -193,6 +196,12 @@ public class Bridge {
                     db.setMeta("online", "0");
                     out.put("signedOut", true);
                 }
+            } else if (!isEmpty(current)) {
+                db.setMeta("serverUrl", "");
+                db.removeMeta("token");
+                db.removeMeta("user");
+                db.setMeta("online", "0");
+                out.put("signedOut", true);
             }
             if (!cleanName.isEmpty()) db.setMeta("deviceName", cleanName);
             out.put("deviceName", deviceName());
@@ -299,9 +308,16 @@ public class Bridge {
     }
 
     @JavascriptInterface
-    public String updateStatus(String id, String status) {
-        boolean updated = db.updateStatus(account(), id, status == null ? "" : status.toUpperCase());
-        return updated ? SyncClient.ok().toString() : SyncClient.error("Transaction not found.").toString();
+    public String updateStatus(String id, String status, String claimedBy) {
+        String cleanStatus = status == null ? "" : status.toUpperCase();
+        String receiver = claimedBy == null ? "" : claimedBy.trim();
+        if ("CLAIMED".equals(cleanStatus) && receiver.length() < 2) {
+            return SyncClient.error("Enter the receiver's full name.").toString();
+        }
+        boolean updated = db.updateStatus(account(), id, cleanStatus, receiver);
+        if (!updated) return SyncClient.error("Transaction not found.").toString();
+        SyncClient.syncAsync(activity);
+        return SyncClient.ok().toString();
     }
 
     @JavascriptInterface
@@ -317,7 +333,7 @@ public class Bridge {
     }
 
     @JavascriptInterface
-    public String importInbox() {
+    public String importInbox(String force) {
         if (activity.checkSelfPermission(Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) {
             requestSmsPermission();
             return SyncClient.error("Allow the SMS permission, then tap Import again.").toString();
@@ -325,17 +341,31 @@ public class Bridge {
         int scanned = 0;
         int imported = 0;
         Cursor cursor = null;
+        long since = 0;
+        if (!"1".equals(force)) {
+            String saved = db.getMeta("lastInboxScan");
+            if (saved != null && !saved.isEmpty()) {
+                try {
+                    since = Long.parseLong(saved);
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        long newest = since;
         try {
+            String selection = since > 0 ? Telephony.Sms.DATE + " >= ?" : null;
+            String[] selectionArgs = since > 0 ? new String[]{String.valueOf(since)} : null;
             cursor = activity.getContentResolver().query(
                     Telephony.Sms.Inbox.CONTENT_URI,
                     new String[]{Telephony.Sms.ADDRESS, Telephony.Sms.BODY, Telephony.Sms.DATE},
-                    null, null, Telephony.Sms.DATE + " DESC");
+                    selection, selectionArgs, Telephony.Sms.DATE + " DESC");
             if (cursor != null) {
                 while (cursor.moveToNext() && scanned < 500) {
                     scanned++;
                     String sender = cursor.getString(0);
                     String body = cursor.getString(1);
                     long timestamp = cursor.getLong(2);
+                    if (timestamp > newest) newest = timestamp;
                     if (!SmsParser.isTransactionMessage(sender, body)) continue;
                     SmsParser.Parsed parsed = SmsParser.parse(sender, body, Time.toIso(timestamp));
                     if (!parsed.ok) continue;
@@ -344,6 +374,7 @@ public class Bridge {
                     if (result.error == null && !result.duplicate) imported++;
                 }
             }
+            db.setMeta("lastInboxScan", String.valueOf(newest > 0 ? newest : System.currentTimeMillis()));
             if (imported > 0) SyncClient.syncAsync(activity);
             JSONObject out = SyncClient.ok();
             out.put("imported", imported);
@@ -366,6 +397,18 @@ public class Bridge {
             if (activity instanceof MainActivity) ((MainActivity) activity).requestSmsPermissions();
         });
         return SyncClient.ok().toString();
+    }
+
+    @JavascriptInterface
+    public String copyText(String text) {
+        try {
+            ClipboardManager manager = (ClipboardManager) activity.getSystemService(Context.CLIPBOARD_SERVICE);
+            if (manager == null) return SyncClient.error("Clipboard is not available.").toString();
+            manager.setPrimaryClip(ClipData.newPlainText("TRANSAC CSV", text == null ? "" : text));
+            return SyncClient.ok().toString();
+        } catch (Exception error) {
+            return SyncClient.error(error.getMessage()).toString();
+        }
     }
 
     @JavascriptInterface
@@ -403,6 +446,9 @@ public class Bridge {
         json.put("deviceName", value(tx.deviceName));
         json.put("source", value(tx.source));
         json.put("synced", tx.synced);
+        json.put("claimedBy", value(tx.claimedBy));
+        json.put("claimedAt", value(tx.claimedAt));
+        json.put("statusDirty", tx.statusDirty);
         return json;
     }
 

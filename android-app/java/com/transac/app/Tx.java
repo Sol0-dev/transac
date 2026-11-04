@@ -19,4 +19,7 @@ public class Tx {
     public String deviceName;
     public String source = "sms";
     public boolean synced;
+    public String claimedBy;
+    public String claimedAt;
+    public boolean statusDirty;
 }

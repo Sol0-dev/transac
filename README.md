@@ -1,46 +1,77 @@
 # TRANSAC - Automated Log Solution
 
-**TRANSAC** reads GCash and Maya transaction messages on an Android phone and logs every
-transaction into one centralized control center. It is built from the capstone prototype:
-blue TRANSAC header, reference search, a single ledger list with `UNCLAIMED` statuses, and
-the round **+** action.
+**TRANSAC** replaces manual logging of GCash and Maya transactions. It monitors incoming SMS and
+scans existing messages on the Android phone, parses every transaction notification, and keeps
+a searchable ledger entirely on the device. The control center is built into the APK, so the app
+works without a server, data connection, or Wi-Fi.
 
 **[Download the Android APK](../../releases/latest/download/transac.apk)**
 
 <p align="center">
   <img src="docs/screenshots/mobile.png" alt="TRANSAC mobile app" width="320" />
-  <img src="docs/screenshots/dashboard.png" alt="TRANSAC control center" width="720" />
+  <img src="docs/screenshots/dashboard.png" alt="TRANSAC control center on the phone" width="720" />
 </p>
 
 ## What it does
 
-- **Reads SMS automatically** on Android using a `BroadcastReceiver` and the `RECEIVE_SMS` permission.
+- **Monitors incoming SMS automatically** with an Android `BroadcastReceiver` and the `RECEIVE_SMS` permission.
+- **Scans existing SMS** on first sign-in, on every app open, after the permission is granted, and every few minutes while the app is open. Old or missed transactions are captured too.
 - **Parses GCash and Maya messages** into provider, reference number, amount, direction, sender, and status.
-- **Logs locally first** in SQLite so nothing is lost when the phone is offline.
-- **Works without a server** using a local account: install the APK, create a local account, and start logging immediately.
-- **Syncs to one central platform** where every phone's transactions appear in a single ledger.
+- **Keeps everything on the phone** in a local SQLite ledger. No server, internet, or Wi-Fi is required.
+- **Includes the control center in the APK**: totals, search, filters, receiver names, and a copy-to-clipboard CSV export.
+- **Requires the receiver's full name when marking a transaction as claimed**, so every claim records who received the money.
 - **Deduplicates by reference number**, so the same SMS is never logged twice.
-- **Signs up and signs in** with an email/password account; each account only sees its own logs.
-- **Works as a PWA too**: the same UI installs from the browser with "Add to Home Screen".
+- **Signs up and signs in locally** with an email/password account that stays on the device.
+- **Optional central sync**: if you later run the included Node.js server, phones can share one ledger.
 
-## Download and install the Android app
-
-The signed APK is in [`dist/transac.apk`](dist/transac.apk) and attached to the
-[latest release](../../releases/latest).
+## Install on the phone
 
 1. Download `transac.apk` on the Android phone.
-2. Open it and allow **Install unknown apps** for the browser/file manager when prompted.
+2. Open it and allow **Install unknown apps** for the browser or file manager when prompted.
 3. Open **TRANSAC** and allow the **SMS** permission.
-4. Pick how you want to run it:
-   - **Centralized:** enter the server address of the computer running this project, for
-     example `http://192.168.1.10:3000`, then sign up or sign in.
-   - **Phone only:** tap **Use this phone only** and create a local account. No server is
-     needed, and the app logs SMS immediately.
+4. On first launch, choose **Sign up**, enter a name, email, and password, and tap **Create account**. This creates a local account on the phone.
+5. The app scans existing GCash/Maya messages and shows them in the ledger. New messages appear automatically.
+6. Tap the avatar, then **Open control center**, to see the built-in dashboard.
 
-The app targets Android 7.0+ (API 24) and targets API 34. It is signed with a demo key
-included in this repository; build your own release key before publishing anywhere.
+No server is required. The app makes no network calls unless you explicitly add a central
+server URL in the settings. The APK targets Android 7.0+ (API 24) and targets API 34. It is
+signed with a demo key included in this repository; build your own release key before
+publishing anywhere.
 
-## Run the centralized platform
+## Automatic SMS monitoring
+
+TRANSAC treats a message as a transaction when the sender or body mentions GCash, G-Cash,
+Mynt, Maya, or PayMaya and the message contains a peso amount.
+
+- **Incoming messages:** the `SmsReceiver` runs whenever an SMS arrives, even when the app is closed.
+- **Existing messages:** the app reads the SMS inbox after sign-in and then incrementally, using the newest scanned timestamp so it does not re-read the whole inbox.
+- **Manual refresh:** **Avatar -> Import recent SMS** forces a full scan of the latest 500 messages.
+- **Duplicates:** parsed transactions are unique by provider and reference number.
+
+To test, send this to the phone from another number:
+
+```
+You have received PHP 500.00 from JUAN DELA CRUZ (09171234567).
+Ref No. 6028871884223. Your new balance is PHP 1,500.00.
+```
+
+The transaction appears in the ledger and in the on-phone control center within a few seconds.
+
+## Claiming a transaction
+
+1. Open a received transaction.
+2. Tap **Mark claimed**.
+3. Enter the receiving person's full name.
+4. Tap **Confirm claim**.
+
+The transaction becomes `CLAIMED`, and the receiver's full name and claim time are stored with
+it. The control center shows the receiver in its own column. If the phone is later connected to
+the optional server, claim changes are pushed on the next sync.
+
+## Optional central server
+
+The server is not needed for the phone app. It is useful when several phones must share one
+ledger. The same APK can connect to it from the sign-in screen with **Use a central server**.
 
 ```bash
 # from the repository root
@@ -51,12 +82,20 @@ No dependencies are required: the server uses only Node.js built-ins and a JSON 
 
 | URL | What it is |
 | --- | --- |
-| `http://localhost:3000/` | Mobile app / installable PWA |
-| `http://localhost:3000/dashboard` | Central control center |
+| `http://localhost:3000/` | Mobile web app / installable PWA |
+| `http://localhost:3000/dashboard` | Web control center |
 | `http://<LAN-IP>:3000/` | Same app from a phone on the same network |
 
-Open the app on the phone with the LAN URL, or install the APK and enter the LAN URL in the
-sign-in screen. The terminal prints every available LAN address on startup.
+Demo account on the server:
+
+```
+Email:    demo@transac.app
+Password: transac123
+```
+
+If several phones sign in to the same account, every transaction appears in one web dashboard
+and each phone is listed under Connected devices. To use the phone app without a server, leave
+the server field blank and use the local account.
 
 ### Phone cannot reach the server?
 
@@ -68,70 +107,28 @@ sign-in screen. The terminal prints every available LAN address on startup.
   forward port `3000` from the host. A NAT-only VM address such as `192.168.80.x` is usually
   not reachable from a phone.
 
-
-### Demo account
-
-```
-Email:    demo@transac.app
-Password: transac123
-```
-
-The demo account starts with five sample GCash logs that match the prototype. New accounts
-start with an empty ledger; use the **+ → Demo** tab to log sample GCash/Maya SMS messages.
-
-### Offline mode on the phone
-
-The APK can run entirely on the phone:
-
-1. On the sign-in screen, tap **Use this phone only**.
-2. Create a local account with a name, email, and password.
-3. GCash/Maya SMS messages are parsed and stored in the phone's SQLite database.
-4. The header shows **Offline - saved on this device** while no server is connected.
-
-The local password is hashed with PBKDF2 and stored only on the phone. If you later connect
-to the central server and create an account with the **same email**, the locally stored
-transactions are uploaded to that account on the next sync. Use **Avatar → Sync now** to
-force an upload.
-
-## Testing the SMS reader
-
-1. Sign in on the phone and allow the SMS permission.
-2. Send a text message to the phone containing a GCash/Maya style notification, for example:
-
-   ```
-   You have received PHP 500.00 from JUAN DELA CRUZ (09171234567).
-   Ref No. 6028871884223. Your new balance is PHP 1,500.00.
-   ```
-
-3. The transaction appears in the phone list and on the control center within a few seconds.
-4. Existing messages can be imported with **Avatar → Import recent SMS** (up to the last 500 messages).
-
-Any SMS whose sender or body mentions GCash, G-Cash, Mynt, Maya, or PayMaya and contains a
-peso amount is treated as a transaction. Messages are parsed on the device; the server receives
-the original SMS body so it can re-parse with the same rules.
-
 ## How it fits together
 
 ```
-Android phone                         Central server (Node.js)
-┌──────────────────────────┐          ┌───────────────────────────┐
-│ TRANSAC APK (WebView UI) │  HTTPS   │ /api/auth/*   accounts    │
-│  ├ SQLite local ledger   │ ───────► │ /api/ingest   SMS/ledger  │
-│  ├ SMS BroadcastReceiver │          │ /api/transactions         │
-│  └ offline sync queue    │ ◄─────── │ /api/stats, /api/devices  │
-└──────────────────────────┘          │ JSON store (data/db.json) │
-                                      └─────────────┬─────────────┘
-                                                    │
-                                      ┌─────────────▼─────────────┐
-                                      │ /dashboard control center  │
-                                      └───────────────────────────┘
+Android phone (works offline)                 Optional central server (Node.js)
+┌──────────────────────────────────┐          ┌───────────────────────────┐
+│ TRANSAC APK                      │          │ /api/auth/*   accounts    │
+│  ├ SMS BroadcastReceiver         │  LAN or  │ /api/ingest   SMS/ledger  │
+│  ├ Inbox scanner (old + missed)  │  HTTPS   │ /api/transactions         │
+│  ├ SQLite ledger + local account │ ───────► │ /api/transactions/claim   │
+│  ├ Built-in control center (UI)  │          │ /api/stats, /api/devices  │
+│  └ claim receiver name           │ ◄─────── │ JSON store (data/db.json) │
+└──────────────────────────────────┘          └───────────────────────────┘
 ```
 
-The same HTML/CSS/JS UI is used in two ways:
+The APK is the full application:
 
-- **Browser/PWA:** served by `server.js`, talks to the API with `fetch` and a bearer token.
-- **Android APK:** bundled in `assets/www`, talks to a native `TransacNative` JavaScript
-  bridge. The bridge owns SQLite, SMS parsing, and syncing, so the UI works offline.
+- **Mobile screen:** incoming and existing SMS become transactions in the on-device ledger.
+- **Control center:** bundled in the APK. It reads the same SQLite ledger through the native
+  `TransacNative` bridge, so totals, filters, claims, receiver names, and CSV export work
+  without a server.
+- **Optional server:** when a server URL is configured, the same ledger syncs to the web
+  control center so several phones can share one account.
 
 ## Project structure
 
@@ -162,7 +159,7 @@ The same HTML/CSS/JS UI is used in two ways:
 │   │   ├── Db.java            # SQLite ledger
 │   │   └── Time.java
 │   └── res/
-├── test/parser.test.js        # parser unit tests
+├── test/                      # parser and ledger unit tests
 ├── dist/transac.apk           # signed installable build
 └── docs/screenshots/
 ```
@@ -181,7 +178,8 @@ All ledger routes require `Authorization: Bearer <token>`.
 | `POST` | `/api/ingest` | Parse and store one or many SMS messages |
 | `GET` | `/api/transactions` | Paginated ledger with search/filters |
 | `POST` | `/api/transactions` | Add a manual transaction |
-| `PATCH` | `/api/transactions/:id` | Set `UNCLAIMED`, `CLAIMED`, or `SENT` |
+| `PATCH` | `/api/transactions/:id` | Set `UNCLAIMED`, `CLAIMED`, or `SENT`; requires `claimedBy` for `CLAIMED` |
+| `POST` | `/api/transactions/claim` | Claim by provider and reference (used by the phone sync) |
 | `DELETE` | `/api/transactions/:id` | Delete a log |
 | `GET` | `/api/stats` | Dashboard totals |
 | `GET` | `/api/devices` | Connected devices |
@@ -224,15 +222,15 @@ npm test
 
 ## Security notes and limitations
 
-- This is a capstone/demo deployment. The APK talks to the server over **HTTP on your LAN**.
-  Use HTTPS and a real certificate before exposing it to the internet.
+- The APK works with no network. It only talks to a server when you explicitly configure a
+  server URL.
+- The local account password is hashed with PBKDF2 and stored only on the phone. The optional
+  server uses `scrypt` hashes and 256-bit bearer tokens that expire after 30 days.
+- If a server is used, traffic is **HTTP on your LAN** by default. Use HTTPS and a real
+  certificate before exposing it to the internet.
 - The included signing keystore is a **demo key**. Generate your own for a public release.
 - `READ_SMS` / `RECEIVE_SMS` are restricted permissions on Google Play. Sideloading the APK
   for a capstone demo is fine; publishing to Play requires an approved SMS use case.
-- Claiming/deleting a transaction in the app is local-only; the control center can claim logs
-  for the central ledger. Full two-way status sync is a future improvement.
-- Passwords are hashed with `scrypt` and sessions are random 256-bit bearer tokens that expire
-  after 30 days.
 - The JSON store is single-process and intended for a small deployment. Swap in PostgreSQL for
   production use.
 

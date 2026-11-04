@@ -7,6 +7,9 @@
     <title>TRANSAC - Control Center</title>
     <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="dashboard.css" />
+    <script>
+      if (window.TransacNative) document.documentElement.classList.add('native');
+    </script>
   </head>
   <body>
     <!-- Sign in -->
@@ -112,6 +115,7 @@
                   <th>Reference</th>
                   <th class="num">Amount</th>
                   <th>Status</th>
+                  <th>Receiver</th>
                   <th>Device</th>
                   <th>From / to</th>
                   <th></th>
@@ -126,8 +130,8 @@
         <section class="panel">
           <div class="panel-head">
             <div>
-              <h2>Connected devices</h2>
-              <p>Phones and browsers logging into this account.</p>
+              <h2 id="devicesTitle">Connected devices</h2>
+              <p id="devicesNote">Phones and browsers logging into this account.</p>
             </div>
           </div>
           <div class="devices" id="devices"></div>
@@ -138,6 +142,21 @@
           <span id="lastRefresh">-</span>
         </footer>
       </main>
+    </div>
+
+    <div class="modal-backdrop" id="claimBackdrop" hidden></div>
+    <div class="modal" id="claimModal" hidden role="dialog" aria-modal="true" aria-labelledby="claimTitle">
+      <h3 id="claimTitle">Mark as claimed</h3>
+      <p class="modal-sub" id="claimSub">Record who received this transaction.</p>
+      <label class="field">
+        <span>Receiver full name</span>
+        <input id="claimName" type="text" placeholder="Full name of the person claiming" autocomplete="name" />
+      </label>
+      <p class="gate-error" id="claimError" role="alert"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="claimCancel" type="button">Cancel</button>
+        <button class="btn" id="claimConfirm" type="button">Confirm claim</button>
+      </div>
     </div>
 
     <div class="toast" id="toast" role="status"></div>

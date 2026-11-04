@@ -300,14 +300,33 @@ async function handleApi(req, res, url) {
     });
   }
 
+  if (pathname === '/api/transactions/claim' && method === 'POST') {
+    const body = await readBody(req);
+    const transaction = store.findByReference(auth.user.id, body.provider, body.reference);
+    if (!transaction) return sendJson(res, 404, { error: 'Transaction not found.' });
+    const result = store.updateStatus(
+      auth.user.id,
+      transaction.id,
+      String(body.status || '').toUpperCase(),
+      body.claimedBy,
+    );
+    if (!result.ok) return sendJson(res, result.statusCode, { error: result.error });
+    return sendJson(res, 200, { transaction: result.transaction });
+  }
+
   const match = /^\/api\/transactions\/([A-Za-z0-9-]+)$/.exec(pathname);
   if (match) {
     const id = match[1];
     if (method === 'PATCH') {
       const body = await readBody(req);
-      const updated = store.updateStatus(auth.user.id, id, String(body.status || '').toUpperCase());
-      if (!updated) return sendJson(res, 404, { error: 'Transaction not found or invalid status.' });
-      return sendJson(res, 200, { transaction: updated });
+      const result = store.updateStatus(
+        auth.user.id,
+        id,
+        String(body.status || '').toUpperCase(),
+        body.claimedBy,
+      );
+      if (!result.ok) return sendJson(res, result.statusCode, { error: result.error });
+      return sendJson(res, 200, { transaction: result.transaction });
     }
     if (method === 'DELETE') {
       const removed = store.remove(auth.user.id, id);

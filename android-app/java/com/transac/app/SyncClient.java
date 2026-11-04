@@ -171,6 +171,26 @@ public final class SyncClient {
                 db.markSynced(ids);
             }
 
+            // Push claim / unclaim changes made on this phone.
+            List<Tx> dirtyStatuses = db.dirtyStatuses(account, 50);
+            if (!dirtyStatuses.isEmpty()) {
+                List<String> statusIds = new ArrayList<>();
+                for (Tx tx : dirtyStatuses) {
+                    JSONObject claim = new JSONObject();
+                    claim.put("provider", tx.provider);
+                    claim.put("reference", tx.reference);
+                    claim.put("status", tx.status);
+                    claim.put("claimedBy", tx.claimedBy == null ? "" : tx.claimedBy);
+                    Response response = post(serverUrl + "/api/transactions/claim", token, claim);
+                    if (response.code == 401) {
+                        sessionExpired(db);
+                        return;
+                    }
+                    if (response.ok() || response.code == 404) statusIds.add(tx.id);
+                }
+                db.markStatusSynced(statusIds);
+            }
+
             db.setMeta("online", "1");
             db.setMeta("lastSync", Time.nowIso());
             db.removeMeta("authError");

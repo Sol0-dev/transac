@@ -21,7 +21,9 @@ fi
 echo "==> Copying web UI into the APK assets"
 rm -rf "$APP/assets/www"
 mkdir -p "$APP/assets/www/icons"
-cp "$ROOT/public/index.html" "$ROOT/public/app.js" "$ROOT/public/styles.css" "$ROOT/public/manifest.webmanifest" "$APP/assets/www/"
+cp "$ROOT/public/index.html" "$ROOT/public/app.js" "$ROOT/public/styles.css" \
+   "$ROOT/public/dashboard.html" "$ROOT/public/dashboard.css" "$ROOT/public/dashboard.js" \
+   "$ROOT/public/manifest.webmanifest" "$APP/assets/www/"
 cp "$ROOT/public/icons/icon.svg" "$ROOT/public/icons/icon-192.png" "$ROOT/public/icons/icon-512.png" "$APP/assets/www/icons/"
 
 echo "==> Preparing build directories"
