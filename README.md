@@ -52,6 +52,17 @@ No dependencies are required: the server uses only Node.js built-ins and a JSON 
 Open the app on the phone with the LAN URL, or install the APK and enter the LAN URL in the
 sign-in screen. The terminal prints every available LAN address on startup.
 
+### Phone cannot reach the server?
+
+- Keep `npm start` running while testing.
+- The phone and computer must be on the same Wi-Fi network.
+- Use the computer's LAN address, never `localhost` or `127.0.0.1`.
+- Allow TCP port `3000` through the computer firewall.
+- If this project runs inside a virtual machine, switch the VM to bridged networking or
+  forward port `3000` from the host. A NAT-only VM address such as `192.168.80.x` is usually
+  not reachable from a phone.
+
+
 ### Demo account
 
 ```
