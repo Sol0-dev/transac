@@ -42,6 +42,9 @@
     deviceId: '',
     deviceName: 'My Phone',
     authMode: 'signin',
+    hasLocalAccount: false,
+    localEmail: '',
+    localName: '',
     activeSheet: null,
     previewTimer: null,
     refreshTimer: null,
@@ -62,6 +65,7 @@
     authPassword: $('authPassword'),
     authError: $('authError'),
     authSubmit: $('authSubmit'),
+    authLocal: $('authLocal'),
     settingsBtn: $('settingsBtn'),
     searchInput: $('searchInput'),
     clearSearch: $('clearSearch'),
@@ -273,9 +277,16 @@
 
   function showAuth(message) {
     closeSheets();
+    setAuthMode('signin');
     if (isNative) {
       const status = callNative('getStatus');
       if (status && status.serverUrl) state.serverUrl = status.serverUrl;
+      state.hasLocalAccount = Boolean(status && status.hasLocalAccount);
+      state.localEmail = (status && status.localEmail) || state.localEmail;
+      state.localName = (status && status.localName) || state.localName;
+      if (state.localEmail && !els.authEmail.value) els.authEmail.value = state.localEmail;
+      if (state.localName && !els.authName.value) els.authName.value = state.localName;
+      els.authLocal.textContent = state.hasLocalAccount ? 'Sign in on this phone' : 'Create a local account';
     }
     els.authServerUrl.value = state.serverUrl || '';
     els.authScreen.classList.remove('hidden');
@@ -345,6 +356,53 @@
     } finally {
       els.authSubmit.disabled = false;
       els.authSubmit.textContent = mode === 'signin' ? 'Sign in' : 'Create account';
+    }
+  }
+
+  async function submitLocalAuth() {
+    if (!isNative) return;
+    let mode = state.authMode;
+    const email = els.authEmail.value.trim();
+    const password = els.authPassword.value;
+    const name = els.authName.value.trim();
+
+    els.authError.textContent = '';
+    if (mode === 'signin' && !state.hasLocalAccount) {
+      setAuthMode('signup');
+      els.authError.textContent = 'Create your local account first. Add your name, then tap again.';
+      return;
+    }
+    if (mode === 'signup' && state.hasLocalAccount) mode = 'signin';
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      els.authError.textContent = 'Enter a valid email address.';
+      return;
+    }
+    if (password.length < 8) {
+      els.authError.textContent = 'Password must be at least 8 characters.';
+      return;
+    }
+    if (mode === 'signup' && name.length < 2) {
+      els.authError.textContent = 'Enter your full name.';
+      return;
+    }
+
+    els.authLocal.disabled = true;
+    try {
+      const result = callNative('localAuth', mode, name, email, password);
+      if (!result.ok) throw new Error(result.error || 'Could not open the local account.');
+      state.user = result.user;
+      state.serverUrl = '';
+      state.hasLocalAccount = true;
+      state.localEmail = result.user.email || email;
+      state.deviceName = result.deviceName || state.deviceName;
+      els.authPassword.value = '';
+      hideAuth();
+      await afterAuth();
+      toast('Offline mode: logs are saved on this phone.');
+    } catch (error) {
+      els.authError.textContent = error.message || 'Something went wrong.';
+    } finally {
+      els.authLocal.disabled = false;
     }
   }
 
@@ -857,6 +915,7 @@
   els.authTabSignin.addEventListener('click', () => setAuthMode('signin'));
   els.authTabSignup.addEventListener('click', () => setAuthMode('signup'));
   els.authSubmit.addEventListener('click', submitAuth);
+  els.authLocal.addEventListener('click', submitLocalAuth);
   [els.authEmail, els.authPassword, els.authName, els.authServerUrl].forEach((input) => {
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Enter') submitAuth();

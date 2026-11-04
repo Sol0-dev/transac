@@ -5,6 +5,8 @@ transaction into one centralized control center. It is built from the capstone p
 blue TRANSAC header, reference search, a single ledger list with `UNCLAIMED` statuses, and
 the round **+** action.
 
+**[Download the Android APK](../../releases/latest/download/transac.apk)**
+
 <p align="center">
   <img src="docs/screenshots/mobile.png" alt="TRANSAC mobile app" width="320" />
   <img src="docs/screenshots/dashboard.png" alt="TRANSAC control center" width="720" />
@@ -15,6 +17,7 @@ the round **+** action.
 - **Reads SMS automatically** on Android using a `BroadcastReceiver` and the `RECEIVE_SMS` permission.
 - **Parses GCash and Maya messages** into provider, reference number, amount, direction, sender, and status.
 - **Logs locally first** in SQLite so nothing is lost when the phone is offline.
+- **Works without a server** using a local account: install the APK, create a local account, and start logging immediately.
 - **Syncs to one central platform** where every phone's transactions appear in a single ledger.
 - **Deduplicates by reference number**, so the same SMS is never logged twice.
 - **Signs up and signs in** with an email/password account; each account only sees its own logs.
@@ -27,9 +30,12 @@ The signed APK is in [`dist/transac.apk`](dist/transac.apk) and attached to the
 
 1. Download `transac.apk` on the Android phone.
 2. Open it and allow **Install unknown apps** for the browser/file manager when prompted.
-3. Open **TRANSAC**, allow the **SMS** permission, and sign in or create an account.
-4. Enter the server address of the computer running this project, for example
-   `http://192.168.1.10:3000` (phone and computer must be on the same Wi-Fi).
+3. Open **TRANSAC** and allow the **SMS** permission.
+4. Pick how you want to run it:
+   - **Centralized:** enter the server address of the computer running this project, for
+     example `http://192.168.1.10:3000`, then sign up or sign in.
+   - **Phone only:** tap **Use this phone only** and create a local account. No server is
+     needed, and the app logs SMS immediately.
 
 The app targets Android 7.0+ (API 24) and targets API 34. It is signed with a demo key
 included in this repository; build your own release key before publishing anywhere.
@@ -72,6 +78,20 @@ Password: transac123
 
 The demo account starts with five sample GCash logs that match the prototype. New accounts
 start with an empty ledger; use the **+ → Demo** tab to log sample GCash/Maya SMS messages.
+
+### Offline mode on the phone
+
+The APK can run entirely on the phone:
+
+1. On the sign-in screen, tap **Use this phone only**.
+2. Create a local account with a name, email, and password.
+3. GCash/Maya SMS messages are parsed and stored in the phone's SQLite database.
+4. The header shows **Offline - saved on this device** while no server is connected.
+
+The local password is hashed with PBKDF2 and stored only on the phone. If you later connect
+to the central server and create an account with the **same email**, the locally stored
+transactions are uploaded to that account on the next sync. Use **Avatar → Sync now** to
+force an upload.
 
 ## Testing the SMS reader
 

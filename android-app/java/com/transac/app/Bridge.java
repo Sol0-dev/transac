@@ -7,12 +7,19 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
 import android.provider.Telephony;
+import android.util.Base64;
 import android.webkit.JavascriptInterface;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.List;
+import java.util.Locale;
+
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 
 /** The only surface exposed to the bundled WebView. Every method returns JSON. */
 public class Bridge {
@@ -60,6 +67,9 @@ public class Bridge {
             out.put("pending", db.pending(account()));
             out.put("lastSync", value(db.getMeta("lastSync")));
             out.put("authError", value(db.getMeta("authError")));
+            out.put("hasLocalAccount", !isEmpty(db.getMeta("localHash")));
+            out.put("localEmail", value(db.getMeta("localEmail")));
+            out.put("localName", value(db.getMeta("localName")));
             out.put("platform", "android");
         } catch (Exception error) {
             return err(error.getMessage()).toString();
@@ -79,6 +89,76 @@ public class Bridge {
         JSONObject result = SyncClient.signup(db, serverUrl, name, email, password);
         if (result.optBoolean("ok")) SyncClient.syncAsync(activity);
         return result.toString();
+    }
+
+    /**
+     * A local account lets the app work immediately, with no server. Its email is
+     * reused when the same account is later created on the central server, so the
+     * locally logged transactions sync to that account.
+     */
+    @JavascriptInterface
+    public String localAuth(String mode, String name, String email, String password) {
+        try {
+            String cleanEmail = email == null ? "" : email.trim().toLowerCase(Locale.US);
+            String cleanName = name == null ? "" : name.trim();
+            String cleanPassword = password == null ? "" : password;
+            if (!cleanEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                return SyncClient.error("Enter a valid email address.").toString();
+            }
+            if (cleanPassword.length() < 8) {
+                return SyncClient.error("Password must be at least 8 characters.").toString();
+            }
+
+            String existingHash = db.getMeta("localHash");
+            String existingEmail = db.getMeta("localEmail");
+            if ("signup".equals(mode)) {
+                if (cleanName.length() < 2) {
+                    return SyncClient.error("Enter your full name.").toString();
+                }
+                if (!isEmpty(existingHash)) {
+                    return SyncClient.error(
+                            "This phone already has a local account. Sign in with " + existingEmail + ".").toString();
+                }
+                String salt = newSalt();
+                db.setMeta("localSalt", salt);
+                db.setMeta("localHash", hashPassword(cleanPassword, salt));
+                db.setMeta("localName", cleanName);
+                db.setMeta("localEmail", cleanEmail);
+            } else {
+                if (isEmpty(existingHash)) {
+                    return SyncClient.error("No local account yet. Choose Sign up first.").toString();
+                }
+                if (existingEmail == null || !existingEmail.equalsIgnoreCase(cleanEmail)) {
+                    return SyncClient.error("That is not the local account on this phone.").toString();
+                }
+                if (!verifyPassword(cleanPassword, db.getMeta("localSalt"), existingHash)) {
+                    return SyncClient.error("Incorrect password.").toString();
+                }
+                cleanName = isEmpty(db.getMeta("localName")) ? "Phone user" : db.getMeta("localName");
+            }
+
+            JSONObject user = new JSONObject();
+            user.put("id", "local");
+            user.put("name", cleanName);
+            user.put("email", cleanEmail);
+            user.put("createdAt", Time.nowIso());
+
+            db.setMeta("token", "local");
+            db.setMeta("user", user.toString());
+            db.setMeta("userEmail", cleanEmail);
+            db.setMeta("serverUrl", "");
+            db.setMeta("online", "0");
+            db.removeMeta("authError");
+
+            JSONObject out = SyncClient.ok();
+            out.put("user", user);
+            out.put("deviceName", deviceName());
+            out.put("deviceId", deviceId());
+            out.put("local", true);
+            return out.toString();
+        } catch (Exception error) {
+            return SyncClient.error(error.getMessage()).toString();
+        }
     }
 
     @JavascriptInterface
@@ -104,12 +184,12 @@ public class Bridge {
                 if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
                     return SyncClient.error("Server URL must start with http:// or https://.").toString();
                 }
+                boolean wasLocal = "local".equals(db.getMeta("token"));
                 boolean changed = current != null && !current.isEmpty() && !current.equals(cleanUrl);
                 db.setMeta("serverUrl", cleanUrl);
-                if (changed) {
+                if (changed || wasLocal) {
                     db.removeMeta("token");
                     db.removeMeta("user");
-                    db.removeMeta("userEmail");
                     db.setMeta("online", "0");
                     out.put("signedOut", true);
                 }
@@ -328,6 +408,38 @@ public class Bridge {
 
     private static Object value(String value) {
         return value == null ? JSONObject.NULL : value;
+    }
+
+    private static boolean isEmpty(String value) {
+        return value == null || value.isEmpty();
+    }
+
+    private static String newSalt() {
+        byte[] salt = new byte[16];
+        new SecureRandom().nextBytes(salt);
+        return Base64.encodeToString(salt, Base64.NO_WRAP);
+    }
+
+    private static String hashPassword(String password, String saltBase64) throws Exception {
+        byte[] salt = Base64.decode(saltBase64, Base64.NO_WRAP);
+        PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, 120000, 256);
+        try {
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+            return Base64.encodeToString(factory.generateSecret(spec).getEncoded(), Base64.NO_WRAP);
+        } finally {
+            spec.clearPassword();
+        }
+    }
+
+    private static boolean verifyPassword(String password, String saltBase64, String expectedBase64) {
+        if (isEmpty(saltBase64) || isEmpty(expectedBase64)) return false;
+        try {
+            byte[] actual = Base64.decode(hashPassword(password, saltBase64), Base64.NO_WRAP);
+            byte[] expected = Base64.decode(expectedBase64, Base64.NO_WRAP);
+            return MessageDigest.isEqual(actual, expected);
+        } catch (Exception error) {
+            return false;
+        }
     }
 
     private static int parseInt(String value, int fallback) {
